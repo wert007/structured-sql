@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::{ToTokens, quote};
+use quote::{ToTokens, format_ident, quote};
 use syn::{Type, Visibility, spanned::Spanned};
 
 #[macro_export]
@@ -336,10 +336,14 @@ fn derive_onto_struct(
     let field_names = &field_names;
     let field_types: Vec<_> = members.fields.iter().map(|f| &f.ty).collect();
     let field_types = &field_types;
-    let field_types_filter = field_types.iter().map(|f| {
-        let name = f.to_token_stream().to_string();
-        syn::Ident::new(&format!("{name}Filter"), f.span())
-    });
+    let field_types_filter: Vec<_> = field_types
+        .iter()
+        .map(|f| {
+            let name = f.to_token_stream().to_string();
+            syn::Ident::new(&format!("{name}Filter"), f.span())
+        })
+        .collect();
+    let field_types_filter = &field_types_filter;
     let columns: Vec<proc_macro2::TokenStream> = field_types
         .iter()
         .zip(field_names)
@@ -361,6 +365,7 @@ fn derive_onto_struct(
         })
         .collect();
     let columns = proc_macro2::TokenStream::from_iter(columns);
+    let has_filter_names = field_names.iter().map(|f| format_ident!("has_{f}"));
     quote! {
             use structured_sql::filters::*;
         #[derive(Default, Clone, Debug)]
@@ -371,6 +376,11 @@ fn derive_onto_struct(
             pub fn into_generic(self) -> structured_sql::GenericFilter {
                 self.into()
             }
+
+            #(pub fn #has_filter_names(&mut self, expected: #field_types_filter) -> &mut Self {
+                self.#field_names = Some(structured_sql::SqlColumnFilter::MustBeEqual(expected));
+                self
+            })*
         }
 
 
