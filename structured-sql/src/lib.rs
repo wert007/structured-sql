@@ -247,6 +247,15 @@ macro_rules! impl_as_params {
                     .expect("Implement missing columns")
             }
         }
+        impl FromRow for Option<$t> {
+            fn from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Self {
+                use rusqlite::OptionalExtension;
+
+                row.get(column_name.expect("column name"))
+                    .optional()
+                    .unwrap()
+            }
+        }
 
         impl IntoSqlColumnFilter for SqlColumnFilter<$t> {
             fn into_sql_column_filter(

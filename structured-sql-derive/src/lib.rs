@@ -238,8 +238,9 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
 
         impl structured_sql::FromRow for #enum_name {
             fn from_row(column_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Self {
+                use structured_sql::FromRow;
                 let variant: String = row.get("variant").unwrap();
-                #(let #field_names: Option<#field_types> = row.get(stringify!(#field_names)).unwrap();)*
+                #(let #field_names = Option::<#field_types>::from_row(Some(stringify!(#field_names)), row);)*
                 match variant.as_str() {
                     #(stringify!(#variant_names) => #construct_variants,)*
                     _ => unreachable!("Unknown variant found!"),
