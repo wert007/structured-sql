@@ -525,7 +525,6 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a>>(
     let mut sql = format!("SELECT {columns} from {}", T::NAME);
     sql.push(' ');
     sql.push_str(&filter.to_sql());
-    dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
     Ok(statement
         .query_map(filter.get_params(), |row| Ok(T::from_row(None, row)))?

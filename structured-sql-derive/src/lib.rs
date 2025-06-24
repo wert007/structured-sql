@@ -39,8 +39,10 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
             .map(|p| {
                 let field_name = p.value().ident.as_ref().expect("Should be named");
                 let variant_name = &v.ident;
-                let name =
-                    syn::Ident::new(&format!("{}_{}", v.ident, field_name), p.value().span());
+                let name = syn::Ident::new(
+                    &format!("{}_{}", v.ident.to_string().to_lowercase(), field_name),
+                    p.value().span(),
+                );
                 quote! {#enum_name::#variant_name { #field_name: #name, .. }}
             })
             .collect::<Vec<_>>(),
@@ -54,7 +56,10 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
                 for _ in 0..i {
                     match_pattern.push(quote! {_,});
                 }
-                let name = syn::Ident::new(&format!("{}_{}", v.ident, i), p.value().span());
+                let name = syn::Ident::new(
+                    &format!("{}_{}", v.ident.to_string().to_lowercase(), i),
+                    p.value().span(),
+                );
                 match_pattern.push(quote! {#name, ..});
                 quote! {#enum_name::#variant_name(#(#match_pattern)*)}
             })
@@ -70,7 +75,7 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
                     .pairs()
                     .map(|p| p.value().ident.as_ref().unwrap())
                     .map(|i| {
-                        let name = syn::Ident::new(&format!("{variant_name}_{i}"), i.span());
+                        let name = syn::Ident::new(&format!("{}_{i}", variant_name.to_string().to_lowercase()), i.span());
                         quote! { #name }
                     });
 
@@ -82,7 +87,7 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
             }
             syn::Fields::Unnamed(fields_unnamed) => {
                 let field_names = v.fields.members().enumerate().map(|(i, m)| {
-                    let name = syn::Ident::new(&format!("{variant_name}_{i}"), m.span());
+                    let name = syn::Ident::new(&format!("{}_{i}", variant_name.to_string().to_lowercase()), m.span());
                     quote! { #name }
                 });
                 quote! {Self::#variant_name(#(#field_names.expect("Correct Variant"),)*)}
@@ -101,7 +106,7 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
                         syn::Ident::new(
                             &format!(
                                 "{}_{}",
-                                v.ident,
+                                v.ident.to_string().to_lowercase(),
                                 p.value().ident.as_ref().expect("Should be named")
                             ),
                             p.value().span(),
@@ -116,7 +121,10 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
                 .enumerate()
                 .map(|(i, p)| {
                     (
-                        syn::Ident::new(&format!("{}_{i}", v.ident,), p.value().span()),
+                        syn::Ident::new(
+                            &format!("{}_{i}", v.ident.to_string().to_lowercase(),),
+                            p.value().span(),
+                        ),
                         p.value().ty.clone(),
                     )
                 })
@@ -125,14 +133,16 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
         })
         .collect();
     let field_types = &field_types;
+    let param_counts = field_types.iter().map(|t| {
+        if convert_type_to_sql_column_type(t).is_some() {
+            quote! { 1 }
+        } else {
+            quote! {#t::COLUMNS.len()}
+        }
+    });
     let try_get_field_names: Vec<_> = field_names
         .iter()
-        .map(|n| {
-            syn::Ident::new(
-                &format!("try_get_{}", n.to_string().to_lowercase()),
-                n.span(),
-            )
-        })
+        .map(|n| syn::Ident::new(&format!("try_get_{}", n), n.span()))
         .collect();
     let columns: Vec<_> = field_names
         .iter()
@@ -207,9 +217,17 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
 
             fn as_params(&self) -> Vec<&dyn structured_sql::rusqlite::ToSql> {
                 use structured_sql::AsParams;
-                vec![self.as_variant(),
-                    #(Box::leak(Box::new(self.#try_get_field_names())),)*
-                ]
+                let mut result: Vec<&dyn structured_sql::rusqlite::ToSql> = vec![self.as_variant()];
+                #(if let Some(value) = self.#try_get_field_names() {
+                    result.extend(value.as_params());
+                } else {
+                    for _ in 0..#param_counts {
+                        result.push(&None::<&dyn structured_sql::rusqlite::ToSql>);
+
+                    }
+                })*
+
+                result
             }
         }
 
@@ -257,11 +275,12 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
                         }
                     },
                 );
-                self.connection.execute(
-                    &format!(
+                let sql = format!(
                         "INSERT INTO {} ({columns}) VALUES ({values})",
                         Self::RowType::NAME
-                    ),
+                    );
+                self.connection.execute(
+                    &sql,
                     row.as_params().as_slice(),
                 )?;
                 Ok(())
@@ -378,11 +397,13 @@ fn derive_onto_struct(struct_name: syn::Ident, members: syn::DataStruct) -> Toke
                     }
                 },
             );
-            self.connection.execute(
-                &format!(
+
+            let sql = format!(
                     "INSERT INTO {} ({columns}) VALUES ({values})",
                     Self::RowType::NAME
-                ),
+                );
+            self.connection.execute(
+                &sql,
                 row.as_params().as_slice(),
             )?;
             Ok(())

@@ -36,6 +36,7 @@ fn main() {
     let test_db = Database::create_in_memory().unwrap();
     dbg!(Test::COLUMNS);
     let test = test_db.load::<Test>().unwrap();
+    // dbg!(test);
     test.insert(Test {
         value1: Point { x: 12, y: 42 },
         value2: "Hello".into(),
