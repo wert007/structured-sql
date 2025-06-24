@@ -86,6 +86,12 @@ mod test {
                 .expect("Implement missing columns");
             Self { x, y }
         }
+
+        fn try_from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Option<Self> {
+            let x: f64 = row.get("x").optional().unwrap()?;
+            let y: f64 = row.get("y").optional().unwrap()?;
+            Some(Self { x, y })
+        }
     }
 
     impl<'a> IntoSqlTable<'a> for Coord {
@@ -246,9 +252,11 @@ macro_rules! impl_as_params {
                     .unwrap()
                     .expect("Implement missing columns")
             }
-        }
-        impl FromRow for Option<$t> {
-            fn from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Self {
+
+            fn try_from_row(
+                column_name: Option<&'static str>,
+                row: &rusqlite::Row,
+            ) -> Option<Self> {
                 use rusqlite::OptionalExtension;
 
                 row.get(column_name.expect("column name"))
@@ -300,8 +308,22 @@ impl_as_params!(f64);
 impl_as_params!(String);
 impl_as_params_and_column_filter!(&str);
 
-pub trait FromRow {
+pub trait FromRow: Sized {
     fn from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Self;
+    fn try_from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Option<Self>;
+}
+
+impl<T: FromRow> FromRow for Option<T> {
+    fn from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Self {
+        T::try_from_row(column_name, row)
+    }
+
+    fn try_from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Option<Self> {
+        match T::try_from_row(column_name, row) {
+            Some(it) => Some(Some(it)),
+            None => None,
+        }
+    }
 }
 
 pub trait IntoSqlTable<'a>: FromRow {

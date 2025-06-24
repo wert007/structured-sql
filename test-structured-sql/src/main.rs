@@ -28,6 +28,21 @@ enum FruitWithData {
     Banana { ripeness: String },
 }
 
+#[derive(Debug, Clone, IntoSqlTable)]
+pub enum Availability {
+    Now {
+        player_url: String,
+        video_url: VideoUrl,
+    },
+    Later,
+}
+
+#[derive(Debug, Clone, IntoSqlTable)]
+pub enum VideoUrl {
+    Direct(String),
+    Blob(String),
+}
+
 const _: () = const { assert!(matches!(Point::COLUMNS.len(), 2)) };
 const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
 const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };

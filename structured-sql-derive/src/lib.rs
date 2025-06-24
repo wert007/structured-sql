@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{ToTokens, quote};
-use syn::{Type, spanned::Spanned};
+use syn::{Type, Visibility, spanned::Spanned};
 
 #[macro_export]
 #[proc_macro_derive(IntoSqlTable)]
@@ -9,13 +9,18 @@ pub fn derive_into_sql_table(input: TokenStream) -> TokenStream {
     let input: syn::DeriveInput = syn::parse(input).unwrap();
 
     match input.data {
-        syn::Data::Struct(data_struct) => derive_onto_struct(input.ident, data_struct),
-        syn::Data::Enum(data_enum) => derive_onto_enum(input.ident, data_enum),
+        syn::Data::Struct(data_struct) => derive_onto_struct(input.vis, input.ident, data_struct),
+        syn::Data::Enum(data_enum) => derive_onto_enum(input.vis, input.ident, data_enum),
         syn::Data::Union(data_union) => todo!(),
     }
 }
 
-fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStream {
+fn derive_onto_enum(
+    vis: Visibility,
+    enum_name: syn::Ident,
+    data_enum: syn::DataEnum,
+) -> TokenStream {
+    // let vis =
     let filter_name = syn::Ident::new(&format!("{enum_name}Filter"), enum_name.span());
     let table_name = syn::Ident::new(&format!("{enum_name}Table"), enum_name.span());
 
@@ -66,7 +71,7 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
             .collect::<Vec<_>>(),
         syn::Fields::Unit => vec![],
     });
-    let construct_variants = variants.iter().map(|v| {
+    let construct_variants: Vec<_> = variants.iter().map(|v| {
         let variant_name = &v.ident;
         match &v.fields {
             syn::Fields::Named(fields_named) => {
@@ -94,7 +99,8 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
             }
             syn::Fields::Unit => quote! {Self::#variant_name},
         }
-    });
+    }).collect();
+    let construct_variants = &construct_variants;
     let (field_names, field_types): (Vec<_>, Vec<_>) = variants
         .iter()
         .flat_map(|v| match &v.fields {
@@ -183,7 +189,7 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
         }
 
         #[derive(Default, Clone, Debug)]
-        struct #filter_name {
+        #vis struct #filter_name {
             filter: structured_sql::SqlColumnFilter<&'static str>,
         }
 
@@ -231,7 +237,7 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
             }
         }
 
-        struct #table_name<'a> {
+        #vis struct #table_name<'a> {
             connection: &'a structured_sql::rusqlite::Connection,
         }
 
@@ -245,6 +251,16 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
                     #(stringify!(#variant_names) => #construct_variants,)*
                     _ => unreachable!("Unknown variant found!"),
                 }
+            }
+
+            fn try_from_row(column_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Option<Self> {
+                use structured_sql::FromRow;
+                let variant: String = String::try_from_row(Some("variant"), row)?;
+                #(let #field_names = Option::<#field_types>::from_row(Some(stringify!(#field_names)), row);)*
+                Some(match variant.as_str() {
+                    #(stringify!(#variant_names) => #construct_variants,)*
+                    _ => unreachable!("Unknown variant found!"),
+                })
             }
         }
 
@@ -300,7 +316,11 @@ fn derive_onto_enum(enum_name: syn::Ident, data_enum: syn::DataEnum) -> TokenStr
     .into()
 }
 
-fn derive_onto_struct(struct_name: syn::Ident, members: syn::DataStruct) -> TokenStream {
+fn derive_onto_struct(
+    vis: Visibility,
+    struct_name: syn::Ident,
+    members: syn::DataStruct,
+) -> TokenStream {
     let filter_name = syn::Ident::new(&format!("{struct_name}Filter"), struct_name.span());
     let table_name = syn::Ident::new(&format!("{struct_name}Table"), struct_name.span());
 
@@ -344,7 +364,7 @@ fn derive_onto_struct(struct_name: syn::Ident, members: syn::DataStruct) -> Toke
     quote! {
             use structured_sql::filters::*;
         #[derive(Default, Clone, Debug)]
-        struct #filter_name {
+        #vis struct #filter_name {
             #(#field_names: Option<structured_sql::SqlColumnFilter<#field_types_filter>>,)*
         }
         impl #filter_name {
@@ -365,7 +385,7 @@ fn derive_onto_struct(struct_name: syn::Ident, members: syn::DataStruct) -> Toke
     }
 
 
-        struct #table_name<'a> {
+        #vis struct #table_name<'a> {
             connection: &'a structured_sql::rusqlite::Connection,
         }
 
@@ -440,6 +460,12 @@ fn derive_onto_struct(struct_name: syn::Ident, members: syn::DataStruct) -> Toke
             use structured_sql::rusqlite::OptionalExtension;
             #(let #field_names: #field_types = #field_types::from_row(Some(stringify!(#field_names)), row);)*
             Self {#( #field_names),*}
+        }
+
+        fn try_from_row(row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Option<Self> {
+            use structured_sql::rusqlite::OptionalExtension;
+            #(let #field_names: #field_types = #field_types::try_from_row(Some(stringify!(#field_names)), row)?;)*
+            Some(Self {#( #field_names),*})
         }
     }
 
