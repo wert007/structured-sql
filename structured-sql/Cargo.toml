@@ -1,0 +1,12 @@
+[package]
+name = "structured-sql"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+facet = "0.27.14"
+facet-reflect = "0.27.14"
+konst = { version = "0.3.16", features = ["rust_latest_stable"] }
+rusqlite = { version = "0.36.0", features = ["bundled", "backup"] }
+structured-sql-derive = { path = "../structured-sql-derive/" }
+strum = { version = "0.27.1", features = ["derive"] }
