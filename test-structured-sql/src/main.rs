@@ -115,7 +115,7 @@ pub struct TmdbMovie {
 }
 
 const _: () = const { assert!(matches!(Point::COLUMNS.len(), 2)) };
-const _: () = const { assert!(matches!(Test::COLUMNS.len(), 7)) };
+const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
 const _: () = const { assert!(matches!(Fruit::COLUMNS.len(), 1)) };
 const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 

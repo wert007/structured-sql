@@ -628,6 +628,7 @@ impl Base {
             members.iter().map(|c| c.create_field_name()).collect();
         let columns: Vec<_> = members
             .iter()
+            .filter(|m| !m.is_skipped)
             .map(|m| m.create_column_definition())
             .collect();
         quote! {
@@ -684,6 +685,7 @@ impl Base {
 
         let columns: Vec<_> = members
             .iter()
+            .filter(|m| !m.is_skipped)
             .map(|m| m.create_column_definition())
             .collect();
         let variant_pattern = Member::create_variant_pattern(variants, &members);
