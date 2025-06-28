@@ -5,6 +5,7 @@ struct Test {
     #[silo(primary)]
     id: u32,
     value1: Point,
+    #[silo(skip)]
     value2: String,
     value3: FruitWithData,
 }

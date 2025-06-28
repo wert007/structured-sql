@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
-use syn::{Attribute, Ident, Lit, LitInt, Type, TypePath, Visibility, spanned::Spanned};
+use syn::{Attribute, Ident, LitInt, Type, Visibility};
 
 enum StructuredAttributeArguments {
     Identifier(String),
@@ -30,6 +30,7 @@ impl StructuredAttribute {
 struct AttributeFieldData {
     is_primary: bool,
     is_unique: bool,
+    is_skip: bool,
 }
 impl AttributeFieldData {
     fn parse(attrs: &[Attribute]) -> AttributeFieldData {
@@ -45,6 +46,7 @@ impl AttributeFieldData {
                 StructuredAttributeArguments::Identifier(name) => match name.as_str() {
                     "primary" => this.is_primary = true,
                     "unique" => this.is_unique = true,
+                    "skip" => this.is_skip = true,
                     _ => {
                         panic!("Invalid attribute");
                     }
@@ -63,6 +65,7 @@ struct Member {
     is_primary: bool,
     is_unique: bool,
     is_optional: bool,
+    is_skipped: bool,
     name_is_generated: bool,
 }
 
@@ -74,6 +77,7 @@ impl std::fmt::Debug for Member {
             .field("is_primary", &self.is_primary)
             .field("is_unique", &self.is_unique)
             .field("is_optional", &self.is_optional)
+            .field("is_skipped", &self.is_skipped)
             .field("name_is_generated", &self.name_is_generated)
             .finish()
     }
@@ -126,6 +130,7 @@ impl Member {
         let AttributeFieldData {
             is_primary,
             is_unique,
+            is_skip,
         } = AttributeFieldData::parse(&f.attrs);
         let name_is_generated = f.ident.is_none();
         let name = f
@@ -140,6 +145,7 @@ impl Member {
             is_primary,
             is_unique,
             is_optional,
+            is_skipped: is_skip,
             name_is_generated,
         }
     }
@@ -493,9 +499,16 @@ impl Base {
             ..
         } = self;
 
-        let filter_field_names: Vec<_> = members.iter().map(|m| m.create_field_name()).collect();
+        let filter_field_names: Vec<_> = members
+            .iter()
+            .filter(|m| !m.is_skipped)
+            .map(|m| m.create_field_name())
+            .collect();
 
-        let filter_fields = members.iter().map(|m| m.create_filter_field());
+        let filter_fields = members
+            .iter()
+            .filter(|m| !m.is_skipped)
+            .map(|m| m.create_filter_field());
 
         quote! {
             #[derive(Default, Clone, Debug)]
@@ -594,10 +607,21 @@ impl Base {
             members,
             ..
         } = self;
-        let field_names_with_skips: Vec<_> =
-            members.iter().map(|c| c.create_field_name()).collect();
-        let field_types_with_skips: Vec<_> =
-            members.iter().map(|c| c.create_field_type()).collect();
+        let field_names_with_skips: Vec<_> = members
+            .iter()
+            .filter(|m| !m.is_skipped)
+            .map(|c| c.create_field_name())
+            .collect();
+        let skipped_field_names: Vec<_> = members
+            .iter()
+            .filter(|m| m.is_skipped)
+            .map(|c| c.create_field_name())
+            .collect();
+        let field_types_with_skips: Vec<_> = members
+            .iter()
+            .filter(|m| !m.is_skipped)
+            .map(|c| c.create_field_type())
+            .collect();
         let param_count = field_names_with_skips.len();
         let param_count = LitInt::new(&format!("{param_count}usize"), name.span());
         let field_names_without_skips: Vec<_> =
@@ -609,14 +633,13 @@ impl Base {
         quote! {
             impl structured_sql::FromRow for #name {
                 fn from_row(row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Self {
-                    use structured_sql::rusqlite::OptionalExtension;
-                    #(let #field_names_with_skips = <#field_types_with_skips>::from_row(Some(stringify!(#field_names_with_skips)), row);)*
-                    Self {#( #field_names_without_skips),*}
+                    Self::try_from_row(row_name, row).expect("Error in serializing")
                 }
 
                 fn try_from_row(row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Option<Self> {
                     use structured_sql::rusqlite::OptionalExtension;
                     #(let #field_names_with_skips = <#field_types_with_skips>::try_from_row(Some(stringify!(#field_names_with_skips)), row)?;)*
+                    #(let #skipped_field_names = Default::default();)*
                     Some(Self {#( #field_names_without_skips),*})
                 }
             }
@@ -668,8 +691,6 @@ impl Base {
             Member::create_variant_empty_columns_before(variants, &members);
         let variant_names = Member::create_variant_names(variants, &members);
         let variant_field_names = Member::create_variant_field_names(variants, &members);
-        let variant_field_indices = Member::create_variant_field_indices(variants, &members);
-        // let variant_creation = Member::create_variant_creation(variants, &members);
         quote! {
             impl structured_sql::FromRow for #name {
                 fn from_row(row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Self {
