@@ -6,7 +6,7 @@ use std::{
 };
 
 pub use rusqlite;
-use rusqlite::{Connection, Name, OpenFlags};
+use rusqlite::{Connection, Name, OpenFlags, types::Null};
 pub use structured_sql_derive::IntoSqlTable;
 
 pub use konst;
@@ -31,8 +31,8 @@ mod test {
     use rusqlite::{Connection, OptionalExtension};
 
     use crate::{
-        Database, FromRow, GenericFilter, IntoSqlTable, SqlColumn, SqlColumnFilter, SqlColumnType,
-        SqlTable,
+        AsParams, Database, FromRow, GenericFilter, IntoGenericFilter, IntoSqlTable, SqlColumn,
+        SqlColumnFilter, SqlColumnType, SqlTable,
     };
 
     #[derive(Debug, PartialEq, Facet)]
@@ -59,8 +59,8 @@ mod test {
         }
     }
 
-    impl Into<GenericFilter> for CoordFilter {
-        fn into(self) -> GenericFilter {
+    impl IntoGenericFilter for CoordFilter {
+        fn into_generic(self, column_name: Option<&'static str>) -> GenericFilter {
             let mut columns = HashMap::new();
             if let Some(x) = self.x {
                 columns.insert("x", x.into_generic());
@@ -94,6 +94,14 @@ mod test {
         }
     }
 
+    impl AsParams for Coord {
+        const PARAM_COUNT: usize = 2;
+
+        fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
+            vec![&self.x, &self.y]
+        }
+    }
+
     impl<'a> IntoSqlTable<'a> for Coord {
         type Filter = CoordFilter;
         type Table = CoordTable<'a>;
@@ -101,18 +109,18 @@ mod test {
             SqlColumn {
                 name: "x",
                 r#type: SqlColumnType::Float,
+                is_primary: false,
+                is_unique: false,
             },
             SqlColumn {
                 name: "y",
                 r#type: SqlColumnType::Float,
+                is_primary: false,
+                is_unique: false,
             },
         ];
 
         const NAME: &'static str = "CoordTable";
-
-        fn as_params(&self) -> Vec<&dyn rusqlite::ToSql> {
-            vec![&self.x, &self.y]
-        }
     }
 
     struct CoordTable<'a> {
@@ -158,7 +166,7 @@ mod test {
         }
 
         fn filter(&self, filter: CoordFilter) -> Result<Vec<Coord>, rusqlite::Error> {
-            let generic: GenericFilter = filter.into();
+            let generic = filter.into_generic(None);
             crate::query_table_filtered::<Self::RowType>(&self.connection, generic)
         }
 
@@ -232,12 +240,42 @@ impl Database {
 }
 
 pub trait AsParams {
+    const PARAM_COUNT: usize;
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
+}
+
+impl<T: AsParams> AsParams for Option<T> {
+    fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
+        match self {
+            Some(it) => it.as_params(),
+            None => vec![&Null; T::PARAM_COUNT],
+        }
+    }
+
+    const PARAM_COUNT: usize = T::PARAM_COUNT;
 }
 
 macro_rules! impl_as_params {
     ($t:ty) => {
+        impl IntoGenericFilter for SqlColumnFilter<$t> {
+            fn into_generic(self, column_name: Option<&'static str>) -> GenericFilter {
+                GenericFilter {
+                    columns: self
+                        .into_sql_column_filter(
+                            column_name.expect("has no sub columns, so it needs a column name"),
+                        )
+                        .into_iter()
+                        .collect(),
+                }
+            }
+        }
+
+        impl Filterable for $t {
+            type Filtered = SqlColumnFilter<$t>;
+        }
+
         impl AsParams for $t {
+            const PARAM_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
             }
@@ -245,12 +283,7 @@ macro_rules! impl_as_params {
 
         impl FromRow for $t {
             fn from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Self {
-                use rusqlite::OptionalExtension;
-
-                row.get(column_name.expect("column name"))
-                    .optional()
-                    .unwrap()
-                    .expect("Implement missing columns")
+                Self::try_from_row(column_name, row).expect("Value")
             }
 
             fn try_from_row(
@@ -259,9 +292,15 @@ macro_rules! impl_as_params {
             ) -> Option<Self> {
                 use rusqlite::OptionalExtension;
 
-                row.get(column_name.expect("column name"))
-                    .optional()
-                    .unwrap()
+                match row.get(column_name.expect("column name")).optional() {
+                    Ok(it) => it,
+                    Err(rusqlite::Error::InvalidColumnType(_, _, rusqlite::types::Type::Null)) => {
+                        None
+                    }
+                    Err(err) => {
+                        unreachable!("Expected no errors here: {err}");
+                    }
+                }
             }
         }
 
@@ -278,6 +317,7 @@ macro_rules! impl_as_params {
 macro_rules! impl_as_params_and_column_filter {
     ($t:ty) => {
         impl AsParams for $t {
+            const PARAM_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
             }
@@ -308,6 +348,35 @@ impl_as_params!(f64);
 impl_as_params!(String);
 impl_as_params_and_column_filter!(&str);
 
+pub trait RelatedSqlColumnType {
+    const SQL_COLUMN_TYPE: SqlColumnType;
+}
+
+impl<T: RelatedSqlColumnType> RelatedSqlColumnType for Option<T> {
+    const SQL_COLUMN_TYPE: SqlColumnType = SqlColumnType::to_optional(T::SQL_COLUMN_TYPE);
+}
+
+macro_rules! related_sql_column_type {
+    ($v:path, $t:ty) => {
+        impl RelatedSqlColumnType for $t {
+            const SQL_COLUMN_TYPE: SqlColumnType = $v;
+        }
+    };
+}
+
+related_sql_column_type!(SqlColumnType::Integer, bool);
+related_sql_column_type!(SqlColumnType::Integer, i8);
+related_sql_column_type!(SqlColumnType::Integer, i16);
+related_sql_column_type!(SqlColumnType::Integer, i32);
+related_sql_column_type!(SqlColumnType::Integer, i64);
+related_sql_column_type!(SqlColumnType::Integer, u8);
+related_sql_column_type!(SqlColumnType::Integer, u16);
+related_sql_column_type!(SqlColumnType::Integer, u32);
+related_sql_column_type!(SqlColumnType::Integer, u64);
+related_sql_column_type!(SqlColumnType::Float, f32);
+related_sql_column_type!(SqlColumnType::Float, f64);
+related_sql_column_type!(SqlColumnType::Text, String);
+
 pub trait FromRow: Sized {
     fn from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Self;
     fn try_from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Option<Self>;
@@ -326,13 +395,27 @@ impl<T: FromRow> FromRow for Option<T> {
     }
 }
 
-pub trait IntoSqlTable<'a>: FromRow {
+pub trait IntoSqlTable<'a>: FromRow + AsParams {
     const COLUMNS: &'static [SqlColumn];
     const NAME: &'static str;
     type Table: SqlTable<'a>;
-    type Filter: Into<GenericFilter>;
+    type Filter: IntoGenericFilter;
 
-    fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
+    // fn table_as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
+}
+
+impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T> {
+    const COLUMNS: &'static [SqlColumn] = T::COLUMNS;
+
+    const NAME: &'static str = T::NAME;
+
+    type Table = T::Table;
+
+    type Filter = T::Filter;
+
+    // fn table_as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
+    //     unreachable!()
+    // }
 }
 
 pub trait SqlTable<'a> {
@@ -371,7 +454,17 @@ impl SqlColumnFilter<SqlValue> {
 }
 
 pub mod filters {
+    pub type boolFilter = bool;
+    pub type u8Filter = u8;
+    pub type u16Filter = u16;
+    pub type u32Filter = u32;
+    pub type u64Filter = u64;
+    pub type i8Filter = i8;
+    pub type i16Filter = i16;
     pub type i32Filter = i32;
+    pub type i64Filter = i64;
+    pub type f32Filter = f32;
+    pub type f64Filter = f64;
     pub type StringFilter = String;
 }
 
@@ -392,6 +485,18 @@ impl<T: IntoSqlColumnFilter + Clone + Debug> IntoSqlColumnFilter for SqlColumnFi
             SqlColumnFilter::MustBeEqual(t) => t.into_sql_column_filter(name),
         }
     }
+}
+
+pub trait Filterable {
+    type Filtered: IntoGenericFilter;
+}
+
+impl<T: Filterable> Filterable for Option<T> {
+    type Filtered = T::Filtered;
+}
+
+pub trait IntoGenericFilter {
+    fn into_generic(self, column_name: Option<&'static str>) -> GenericFilter;
 }
 
 pub struct GenericFilter {
@@ -504,6 +609,12 @@ impl SqlValue {
 pub struct SqlColumn {
     pub name: &'static str,
     pub r#type: SqlColumnType,
+    pub is_primary: bool,
+    pub is_unique: bool,
+}
+
+pub trait HasSqlColumnType {
+    const TYPE: SqlColumnType;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -513,16 +624,34 @@ pub enum SqlColumnType {
     Null,
     Text,
     Blob,
+    OptionalFloat,
+    OptionalInteger,
+    OptionalText,
+    OptionalBlob,
 }
 
 impl SqlColumnType {
     fn as_sql(&self) -> &'static str {
         match self {
-            SqlColumnType::Float => "REAL",
-            SqlColumnType::Integer => "INTEGER",
+            SqlColumnType::Float => "REAL NOT NULL",
+            SqlColumnType::Integer => "INTEGER NOT NULL",
             SqlColumnType::Null => "NULL",
-            SqlColumnType::Text => "TEXT",
-            SqlColumnType::Blob => "BLOB",
+            SqlColumnType::Text => "TEXT NOT NULL",
+            SqlColumnType::Blob => "BLOB NOT NULL",
+            SqlColumnType::OptionalFloat => "REAL",
+            SqlColumnType::OptionalInteger => "INTEGER",
+            SqlColumnType::OptionalText => "TEXT",
+            SqlColumnType::OptionalBlob => "BLOB",
+        }
+    }
+
+    const fn to_optional(this: SqlColumnType) -> SqlColumnType {
+        match this {
+            SqlColumnType::OptionalFloat | SqlColumnType::Float => Self::OptionalFloat,
+            SqlColumnType::OptionalInteger | SqlColumnType::Integer => Self::OptionalInteger,
+            SqlColumnType::Null => Self::Null,
+            SqlColumnType::OptionalText | SqlColumnType::Text => Self::OptionalText,
+            SqlColumnType::OptionalBlob | SqlColumnType::Blob => Self::OptionalBlob,
         }
     }
 }
