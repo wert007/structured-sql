@@ -272,6 +272,10 @@ macro_rules! impl_as_params {
 
         impl Filterable for $t {
             type Filtered = SqlColumnFilter<$t>;
+
+            fn must_be_equal(self) -> Self::Filtered {
+                SqlColumnFilter::MustBeEqual(self)
+            }
         }
 
         impl AsParams for $t {
@@ -453,21 +457,6 @@ impl SqlColumnFilter<SqlValue> {
     }
 }
 
-pub mod filters {
-    pub type boolFilter = bool;
-    pub type u8Filter = u8;
-    pub type u16Filter = u16;
-    pub type u32Filter = u32;
-    pub type u64Filter = u64;
-    pub type i8Filter = i8;
-    pub type i16Filter = i16;
-    pub type i32Filter = i32;
-    pub type i64Filter = i64;
-    pub type f32Filter = f32;
-    pub type f64Filter = f64;
-    pub type StringFilter = String;
-}
-
 pub trait IntoSqlColumnFilter {
     fn into_sql_column_filter(
         self,
@@ -489,10 +478,16 @@ impl<T: IntoSqlColumnFilter + Clone + Debug> IntoSqlColumnFilter for SqlColumnFi
 
 pub trait Filterable {
     type Filtered: IntoGenericFilter;
+
+    fn must_be_equal(self) -> Self::Filtered;
 }
 
 impl<T: Filterable> Filterable for Option<T> {
     type Filtered = T::Filtered;
+
+    fn must_be_equal(self) -> Self::Filtered {
+        self.unwrap().must_be_equal()
+    }
 }
 
 pub trait IntoGenericFilter {

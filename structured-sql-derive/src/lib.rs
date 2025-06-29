@@ -177,6 +177,13 @@ impl Member {
         quote! { #name: <#type_ as structured_sql::Filterable>::Filtered}
     }
 
+    fn create_has_filter_field(&self) -> proc_macro2::TokenStream {
+        let Member { name, type_, .. } = self;
+        let type_ = Member::try_strip_option(type_);
+        let name = format_ident!("has_{name}");
+        quote! { #name(mut self, expected: #type_) -> Self}
+    }
+
     fn create_field_name(&self) -> proc_macro2::TokenStream {
         let Member { name, .. } = self;
         quote! { #name }
@@ -350,6 +357,31 @@ impl Member {
     ) -> Vec<proc_macro2::TokenStream> {
         variants.iter().map(|v| quote! {stringify!(#v)}).collect()
     }
+
+    fn try_strip_option(type_: &Type) -> &Type {
+        match type_ {
+            Type::Path(type_path) => {
+                let Some(segment) = type_path.path.segments.iter().next() else {
+                    return type_;
+                };
+                if segment.ident.to_string() != "Option" {
+                    return type_;
+                }
+                match &segment.arguments {
+                    syn::PathArguments::AngleBracketed(angle_bracketed_generic_arguments) => {
+                        let Some(syn::GenericArgument::Type(arg)) =
+                            angle_bracketed_generic_arguments.args.iter().next()
+                        else {
+                            return type_;
+                        };
+                        arg
+                    }
+                    _ => type_,
+                }
+            }
+            _ => type_,
+        }
+    }
 }
 
 struct Base {
@@ -505,10 +537,17 @@ impl Base {
             .map(|m| m.create_field_name())
             .collect();
 
-        let filter_fields = members
+        let filter_fields: Vec<_> = members
             .iter()
             .filter(|m| !m.is_skipped)
-            .map(|m| m.create_filter_field());
+            .map(|m| m.create_filter_field())
+            .collect();
+
+        let has_filter_fields: Vec<_> = members
+            .iter()
+            .filter(|m| !m.is_skipped)
+            .map(|m| m.create_has_filter_field())
+            .collect();
 
         quote! {
             #[derive(Default, Clone, Debug)]
@@ -516,8 +555,24 @@ impl Base {
                 #(#filter_fields,)*
             }
 
+            impl #filter_name {
+                #(
+                    #visibility fn #has_filter_fields {
+                        use structured_sql::Filterable;
+                        self.#filter_field_names = expected.must_be_equal();
+                        self
+                    }
+                )*
+            }
+
             impl structured_sql::Filterable for #name {
                 type Filtered = #filter_name;
+
+                fn must_be_equal(self) -> Self::Filtered {
+                    let mut result = #filter_name::default();
+                    #(result.#filter_field_names = self.#filter_field_names.must_be_equal();)*
+                    result
+                }
             }
 
             impl structured_sql::IntoGenericFilter for #filter_name {
@@ -566,6 +621,12 @@ impl Base {
 
             impl structured_sql::Filterable for #name {
                 type Filtered = #filter_name;
+
+                fn must_be_equal(self) -> Self::Filtered {
+                    let mut result = #filter_name::default();
+                    result.variant = self.variant_name().to_string().must_be_equal();
+                    result
+                }
             }
 
             impl structured_sql::IntoGenericFilter for #filter_name {

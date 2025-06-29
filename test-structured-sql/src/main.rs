@@ -47,7 +47,7 @@ pub enum VideoUrl {
     Blob(String),
 }
 
-#[derive(Debug, Eq, PartialEq, IntoSqlTable)]
+#[derive(Clone, Debug, Eq, PartialEq, IntoSqlTable)]
 pub struct Credits {
     #[silo(primary)]
     id: u32,
