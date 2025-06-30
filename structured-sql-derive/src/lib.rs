@@ -953,7 +953,8 @@ impl ToTokens for Base {
 #[proc_macro_derive(IntoSqlTable, attributes(silo))]
 pub fn derive_into_sql_table(input: TokenStream) -> TokenStream {
     // syn::Data
-    let input: syn::DeriveInput = syn::parse(input).unwrap();
+    let input: syn::DeriveInput = syn::parse(input)
+        .expect("This is a derive macro and should be used with structs or enums.");
 
     let base = match input.data {
         syn::Data::Struct(data_struct) => {

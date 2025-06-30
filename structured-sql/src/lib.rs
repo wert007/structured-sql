@@ -634,7 +634,11 @@ impl GenericFilter {
 
     fn to_sql(&self) -> String {
         use std::fmt::Write;
-        if self.columns.is_empty() {
+        if !self
+            .columns
+            .iter()
+            .any(|c| !matches!(c.1, SqlColumnFilter::Ignored))
+        {
             return String::new();
         }
         let mut result: String = "WHERE".into();
