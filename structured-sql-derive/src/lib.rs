@@ -767,7 +767,7 @@ impl Base {
             }
 
             impl structured_sql::AsParams for #name {
-                const PARAM_COUNT: usize = #param_count;
+                const PARAM_COUNT: usize = #(<#field_types_with_skips as structured_sql::AsParams>::PARAM_COUNT +)* 0;
                 fn as_params(&self) -> Vec<&dyn structured_sql::rusqlite::ToSql> {
                     use structured_sql::AsParams;
                     let mut result = Vec::new();
@@ -884,7 +884,7 @@ impl Base {
             }
 
             impl structured_sql::AsParams for #name {
-                const PARAM_COUNT: usize = #param_count;
+                const PARAM_COUNT: usize = #(<#field_types_with_skips as structured_sql::AsParams>::PARAM_COUNT +)* 1;
                 fn as_params(&self) -> Vec<&dyn structured_sql::rusqlite::ToSql> {
                     use structured_sql::AsParams;
                     let mut result: Vec<&dyn structured_sql::rusqlite::ToSql> = vec![&structured_sql::rusqlite::types::Null; self.empty_columns_before()];

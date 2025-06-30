@@ -1,4 +1,4 @@
-use structured_sql::{Database, IntoSqlTable, SqlTable};
+use structured_sql::{AsParams, Database, IntoSqlTable, SqlTable};
 
 #[derive(Debug, IntoSqlTable, Clone)]
 struct Point {
@@ -114,9 +114,15 @@ pub struct TmdbMovie {
     credits: Option<Credits>,
 }
 
+#[derive(Debug, Clone, IntoSqlTable)]
+pub struct FutureMovie {
+    pub url: String,
+}
+
 const _: () = const { assert!(matches!(Point::COLUMNS.len(), 2)) };
 // const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
 const _: () = const { assert!(matches!(Fruit::COLUMNS.len(), 1)) };
+const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
 const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 
 fn main() {
@@ -146,5 +152,10 @@ fn main() {
     };
     _ = dbg!(test.filter(f));
     test_db.save("test.db").unwrap();
+
+    let table = test_db.load::<FutureMovie>().unwrap();
+    let result = table.filter(FutureMovieFilter::default()).unwrap();
+    table.delete(FutureMovieFilter::default()).unwrap();
+    dbg!(result.into_iter().map(|f| f.url).collect::<Vec<_>>());
     println!("Hello, world!");
 }
