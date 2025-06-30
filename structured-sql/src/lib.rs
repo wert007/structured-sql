@@ -175,9 +175,10 @@ mod test {
                     }
                 },
             );
+
             self.connection.execute(
                 &format!(
-                    "INSERT INTO {} ({columns}) VALUES ({values})",
+                    "INSERT OR IGNORE INTO {} ({columns}) VALUES ({values})",
                     Self::RowType::NAME
                 ),
                 row.as_params().as_slice(),
@@ -208,6 +209,9 @@ mod test {
                 string_storage,
             }
         }
+
+        const INSERT_FAILURE_BEHAVIOR: crate::SqlFailureBehavior =
+            crate::SqlFailureBehavior::Ignore;
     }
 }
 
@@ -300,6 +304,9 @@ impl Database {
             sql.push_str(column.name);
             sql.push_str(" ");
             sql.push_str(column.r#type.as_sql());
+            if column.is_unique {
+                sql.push_str(" UNIQUE");
+            }
         }
         sql.push_str(");");
         self.connection.execute(&sql, ())?;
@@ -525,8 +532,31 @@ impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T> {
     // }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SqlFailureBehavior {
+    #[default]
+    Abort,
+    Fail,
+    Ignore,
+    Replace,
+    Rollback,
+}
+
+impl ToString for SqlFailureBehavior {
+    fn to_string(&self) -> String {
+        match self {
+            SqlFailureBehavior::Abort => "ABORT".into(),
+            SqlFailureBehavior::Fail => "FAIL".into(),
+            SqlFailureBehavior::Ignore => "IGNORE".into(),
+            SqlFailureBehavior::Replace => "REPLACE".into(),
+            SqlFailureBehavior::Rollback => "ROLLBACK".into(),
+        }
+    }
+}
+
 pub trait SqlTable<'a> {
     type RowType: IntoSqlTable<'a>;
+    const INSERT_FAILURE_BEHAVIOR: SqlFailureBehavior;
     fn from_connection(
         connection: &'a Connection,
         string_storage: Arc<Mutex<StaticStringStorage>>,

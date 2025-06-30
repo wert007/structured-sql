@@ -27,11 +27,81 @@ impl StructuredAttribute {
 }
 
 #[derive(Debug, Default)]
+struct AttributeStructData {
+    on_conflict_rollback: bool,
+    on_conflict_abort: bool,
+    on_conflict_fail: bool,
+    on_conflict_ignore: bool,
+    on_conflict_replace: bool,
+}
+
+impl AttributeStructData {
+    fn parse(attrs: &[Attribute]) -> AttributeStructData {
+        let mut this = Self::default();
+        for attribute in attrs {
+            let Some(attribute) = StructuredAttribute::new(attribute) else {
+                panic!("Invalid attribute");
+            };
+            if attribute.path != "silo" {
+                panic!("Invalid attribute");
+            }
+            match attribute.arguments {
+                StructuredAttributeArguments::Identifier(name) => match name.as_str() {
+                    "rollback" => this.on_conflict_rollback = true,
+                    "abort" => this.on_conflict_abort = true,
+                    "fail" => this.on_conflict_fail = true,
+                    "ignore" => this.on_conflict_ignore = true,
+                    "replace" => this.on_conflict_replace = true,
+                    _ => {
+                        panic!("Invalid attribute");
+                    }
+                },
+            }
+        }
+
+        this.validate();
+        this
+    }
+
+    fn validate(&self) {
+        let on_conflict = [
+            self.on_conflict_abort,
+            self.on_conflict_fail,
+            self.on_conflict_ignore,
+            self.on_conflict_replace,
+            self.on_conflict_rollback,
+        ];
+        if on_conflict.iter().fold(0, |acc, cur| acc + *cur as usize) > 1 {
+            panic!("Only one on conflict attribute can be active at once.");
+        }
+    }
+
+    fn on_conflict(&self) -> proc_macro2::TokenStream {
+        match [
+            self.on_conflict_abort,
+            self.on_conflict_fail,
+            self.on_conflict_ignore,
+            self.on_conflict_replace,
+            self.on_conflict_rollback,
+        ] {
+            [false, false, false, false, false] | [true, ..] => {
+                quote! {structured_sql::SqlFailureBehavior::Abort}
+            }
+            [_, true, ..] => quote! {structured_sql::SqlFailureBehavior::Fail},
+            [_, _, true, ..] => quote! {structured_sql::SqlFailureBehavior::Ignore},
+            [_, _, _, true, ..] => quote! {structured_sql::SqlFailureBehavior::Replace},
+            [.., true] => quote! {structured_sql::SqlFailureBehavior::Rollback},
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 struct AttributeFieldData {
     is_primary: bool,
     is_unique: bool,
     is_skip: bool,
 }
+
 impl AttributeFieldData {
     fn parse(attrs: &[Attribute]) -> AttributeFieldData {
         let mut this = Self::default();
@@ -425,6 +495,7 @@ struct Base {
     visibility: Visibility,
     variants: Option<Vec<Ident>>,
     members: Vec<Member>,
+    on_conflict: proc_macro2::TokenStream,
 }
 
 impl std::fmt::Debug for Base {
@@ -445,6 +516,8 @@ impl Base {
         visibility: Visibility,
         data_struct: syn::DataStruct,
     ) -> Self {
+        let attribute_struct_data = AttributeStructData::parse(&attrs);
+        let on_conflict = attribute_struct_data.on_conflict();
         let table_name = format_ident!("{name}Table");
         let filter_name = format_ident!("{name}Filter");
         let members = Member::from_struct_fields(name.clone(), data_struct.fields);
@@ -456,6 +529,7 @@ impl Base {
             visibility,
             variants: None,
             members,
+            on_conflict,
         }
     }
 
@@ -465,6 +539,8 @@ impl Base {
         visibility: Visibility,
         data_enum: syn::DataEnum,
     ) -> Base {
+        let attribute_struct_data = AttributeStructData::parse(&attrs);
+        let on_conflict = attribute_struct_data.on_conflict();
         let table_name = format_ident!("{name}Table");
         let filter_name = format_ident!("{name}Filter");
         let members = Member::from_enum_variants(&data_enum.variants);
@@ -477,6 +553,7 @@ impl Base {
             visibility,
             variants: Some(variants),
             members,
+            on_conflict,
         }
     }
 
@@ -486,6 +563,7 @@ impl Base {
             table_name,
             filter_name,
             visibility,
+            on_conflict,
             ..
         } = self;
         quote! {
@@ -497,6 +575,9 @@ impl Base {
 
         impl<'a> structured_sql::SqlTable<'a> for #table_name<'a> {
             type RowType = #name;
+
+            const INSERT_FAILURE_BEHAVIOR: structured_sql::SqlFailureBehavior = #on_conflict;
+
 
             fn insert(&self, row: Self::RowType) -> Result<(), structured_sql::rusqlite::Error> {
                 use structured_sql::AsParams;
@@ -526,8 +607,9 @@ impl Base {
                 );
 
                 let sql = format!(
-                        "INSERT INTO {} ({columns}) VALUES ({values})",
-                        Self::RowType::NAME
+                        "INSERT OR {} INTO {} ({columns}) VALUES ({values})",
+                        Self::INSERT_FAILURE_BEHAVIOR.to_string(),
+                        Self::RowType::NAME,
                     );
                 self.connection.execute(
                     &sql,
@@ -735,7 +817,6 @@ impl Base {
             .map(|c| c.create_field_type())
             .collect();
         let param_count = field_names_with_skips.len();
-        let param_count = LitInt::new(&format!("{param_count}usize"), name.span());
         let field_names_without_skips: Vec<_> =
             members.iter().map(|c| c.create_field_name()).collect();
         let columns: Vec<_> = members
