@@ -507,6 +507,12 @@ impl Base {
                 structured_sql::query_table_filtered::<Self::RowType>(&self.connection, generic)
             }
 
+            fn delete(&self, filter: #filter_name) -> Result<usize, structured_sql::rusqlite::Error> {
+                use structured_sql::IntoGenericFilter;
+                let generic = filter.into_generic(None);
+                structured_sql::delete_table_filtered::<Self::RowType>(&self.connection, generic)
+            }
+
             fn from_connection(connection: &'a structured_sql::rusqlite::Connection) -> Self {
                 Self { connection }
             }

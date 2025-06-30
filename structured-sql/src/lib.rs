@@ -170,6 +170,11 @@ mod test {
             crate::query_table_filtered::<Self::RowType>(&self.connection, generic)
         }
 
+        fn delete(&self, filter: CoordFilter) -> Result<usize, rusqlite::Error> {
+            let generic = filter.into_generic(None);
+            crate::delete_table_filtered::<Self::RowType>(&self.connection, generic)
+        }
+
         fn from_connection(connection: &'a Connection) -> Self {
             Self { connection }
         }
@@ -429,6 +434,11 @@ pub trait SqlTable<'a> {
         &self,
         filter: <Self::RowType as IntoSqlTable<'a>>::Filter,
     ) -> Result<Vec<Self::RowType>, rusqlite::Error>;
+    fn delete(
+        &self,
+        filter: <Self::RowType as IntoSqlTable<'a>>::Filter,
+    ) -> Result<usize, rusqlite::Error>;
+
     fn insert(&self, row: Self::RowType) -> Result<(), rusqlite::Error>;
 }
 
@@ -684,4 +694,15 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a>>(
     Ok(statement
         .query_map(filter.get_params(), |row| Ok(T::from_row(None, row)))?
         .collect::<Result<_, _>>()?)
+}
+
+pub fn delete_table_filtered<'a, T: IntoSqlTable<'a>>(
+    connection: &&'a rusqlite::Connection,
+    filter: GenericFilter,
+) -> Result<usize, rusqlite::Error> {
+    let mut sql = format!("DELETE FROM {}", T::NAME);
+    sql.push(' ');
+    sql.push_str(&filter.to_sql());
+    let mut statement = connection.prepare(&sql)?;
+    Ok(statement.execute(filter.get_params())?)
 }
