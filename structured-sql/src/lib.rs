@@ -780,15 +780,16 @@ pub enum SqlColumnType {
 impl SqlColumnType {
     fn as_sql(&self) -> &'static str {
         match self {
-            SqlColumnType::Float => "REAL NOT NULL",
-            SqlColumnType::Integer => "INTEGER NOT NULL",
+            // TODO: Find good handling for optional values!
+            // SqlColumnType::Float => "REAL NOT NULL",
+            // SqlColumnType::Integer => "INTEGER NOT NULL",
+            // SqlColumnType::Text => "TEXT NOT NULL",
+            // SqlColumnType::Blob => "BLOB NOT NULL",
+            SqlColumnType::OptionalFloat | Self::Float => "REAL",
+            SqlColumnType::OptionalInteger | Self::Integer => "INTEGER",
+            SqlColumnType::OptionalText | Self::Text => "TEXT",
+            SqlColumnType::OptionalBlob | Self::Blob => "BLOB",
             SqlColumnType::Null => "NULL",
-            SqlColumnType::Text => "TEXT NOT NULL",
-            SqlColumnType::Blob => "BLOB NOT NULL",
-            SqlColumnType::OptionalFloat => "REAL",
-            SqlColumnType::OptionalInteger => "INTEGER",
-            SqlColumnType::OptionalText => "TEXT",
-            SqlColumnType::OptionalBlob => "BLOB",
         }
     }
 
