@@ -989,7 +989,7 @@ impl Base {
                 const COLUMNS: &'static [structured_sql::SqlColumn] = &structured_sql::konst::slice::slice_concat!{structured_sql::SqlColumn ,&[
                     &[structured_sql::SqlColumn {
                         name: "variant",
-                        r#type: structured_sql::SqlColumnType::Text,
+                        r#type: structured_sql::SqlColumnType::OptionalText,
                         is_primary: false,
                         is_unique: false,
                     }],
