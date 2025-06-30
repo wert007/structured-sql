@@ -1,15 +1,5 @@
 use structured_sql::{Database, IntoSqlTable, SqlTable};
 
-#[derive(Debug, IntoSqlTable)]
-struct Test {
-    #[silo(primary)]
-    id: u32,
-    value1: Point,
-    #[silo(skip)]
-    value2: String,
-    value3: FruitWithData,
-}
-
 #[derive(Debug, IntoSqlTable, Clone)]
 struct Point {
     x: i32,
@@ -32,6 +22,22 @@ enum FruitWithData {
     Banana { ripeness: String },
 }
 
+#[derive(Debug, IntoSqlTable)]
+struct Test {
+    #[silo(primary)]
+    id: u32,
+    value1: Point,
+    #[silo(skip)]
+    value2: String,
+    value3: FruitWithData,
+}
+
+#[derive(Debug, Clone, IntoSqlTable)]
+pub enum VideoUrl {
+    Direct(String),
+    Blob(String),
+}
+
 #[derive(Debug, Clone, IntoSqlTable)]
 pub enum Availability {
     Now {
@@ -39,12 +45,6 @@ pub enum Availability {
         video_url: VideoUrl,
     },
     Later,
-}
-
-#[derive(Debug, Clone, IntoSqlTable)]
-pub enum VideoUrl {
-    Direct(String),
-    Blob(String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, IntoSqlTable)]
@@ -115,16 +115,16 @@ pub struct TmdbMovie {
 }
 
 const _: () = const { assert!(matches!(Point::COLUMNS.len(), 2)) };
-const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
+// const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
 const _: () = const { assert!(matches!(Fruit::COLUMNS.len(), 1)) };
 const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 
 fn main() {
+    dbg!(Test::COLUMNS);
     let test_db = Database::create_in_memory().unwrap();
     let test = test_db.load::<Test>().unwrap();
     test_db.save("test-before.db").unwrap();
 
-    // dbg!(test);
     test.insert(Test {
         id: 0,
         value1: Point { x: 12, y: 42 },

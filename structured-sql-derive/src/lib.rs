@@ -208,7 +208,34 @@ impl Member {
                 is_primary: #is_primary,
             }] }
         } else {
-            quote! { < #type_ as structured_sql::IntoSqlTable>::COLUMNS }
+            let type_name = Member::type_to_name(Member::try_strip_option(type_));
+            let column_macro_name = format_ident!("column_names_with_prefix_for_{type_name}");
+            quote! { &#column_macro_name!(stringify!(#name)) }
+        }
+    }
+
+    fn create_column_definition_in_macro(&self) -> proc_macro2::TokenStream {
+        let Member {
+            name,
+            type_,
+            is_primary,
+            is_unique,
+            is_optional,
+            ..
+        } = self;
+        let is_unique = syn::LitBool::new(*is_unique, name.span());
+        let is_primary = syn::LitBool::new(*is_primary, name.span());
+        if let Some(t) = Member::as_simple_type(type_, *is_optional) {
+            quote! { &[structured_sql::SqlColumn {
+                name: concat!($prefix, "_", stringify!(#name)),
+                r#type: #t,
+                is_unique: #is_unique,
+                is_primary: #is_primary,
+            }] }
+        } else {
+            let name = Member::type_to_name(Member::try_strip_option(type_));
+            let column_macro_name = format_ident!("column_names_with_prefix_for_{name}");
+            quote! { &#column_macro_name!(concat!($prefix, "_", stringify!(#name))) }
         }
     }
 
@@ -382,6 +409,13 @@ impl Member {
             _ => type_,
         }
     }
+
+    fn type_to_name(type_: &Type) -> Ident {
+        match type_ {
+            Type::Path(type_path) => type_path.path.get_ident().unwrap().clone(),
+            _ => todo!(),
+        }
+    }
 }
 
 struct Base {
@@ -457,6 +491,7 @@ impl Base {
         quote! {
         #visibility struct #table_name<'a> {
             connection: &'a structured_sql::rusqlite::Connection,
+            string_storage: std::sync::Arc<std::sync::Mutex<structured_sql::StaticStringStorage>>,
         }
 
 
@@ -503,18 +538,18 @@ impl Base {
 
             fn filter(&self, filter: #filter_name) -> Result<Vec<#name>, structured_sql::rusqlite::Error> {
                 use structured_sql::IntoGenericFilter;
-                let generic = filter.into_generic(None);
-                structured_sql::query_table_filtered::<Self::RowType>(&self.connection, generic)
+                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+                structured_sql::query_table_filtered::<Self::RowType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic)
             }
 
             fn delete(&self, filter: #filter_name) -> Result<usize, structured_sql::rusqlite::Error> {
                 use structured_sql::IntoGenericFilter;
-                let generic = filter.into_generic(None);
+                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
                 structured_sql::delete_table_filtered::<Self::RowType>(&self.connection, generic)
             }
 
-            fn from_connection(connection: &'a structured_sql::rusqlite::Connection) -> Self {
-                Self { connection }
+            fn from_connection(connection: &'a structured_sql::rusqlite::Connection, string_storage: std::sync::Arc<std::sync::Mutex<structured_sql::StaticStringStorage>>) -> Self {
+                Self { connection, string_storage }
             }
         }
         }
@@ -582,10 +617,12 @@ impl Base {
             }
 
             impl structured_sql::IntoGenericFilter for #filter_name {
-                fn into_generic(self, column_name: Option<&'static str>) -> structured_sql::GenericFilter {
+                fn into_generic(self, string_storage: &mut structured_sql::StaticStringStorage, column_name: Option<&'static str>) -> structured_sql::GenericFilter {
                     let mut columns = std::collections::HashMap::new();
                     #(
-                        structured_sql::GenericFilter::insert_into_columns(stringify!(#filter_field_names), &mut columns, self.#filter_field_names);
+                        let actual_column_name = column_name.map(|c|
+                            string_storage.store(&[c, "_", stringify!(#filter_field_names)])).unwrap_or(stringify!(#filter_field_names));
+                        structured_sql::GenericFilter::insert_into_columns(actual_column_name, &mut columns, self.#filter_field_names, string_storage);
                     )*
                     structured_sql::GenericFilter { columns }
                 }
@@ -595,11 +632,13 @@ impl Base {
                 fn into_sql_column_filter(
                     self,
                     name: &'static str,
+                    string_storage: &mut structured_sql::StaticStringStorage,
                 ) -> Vec<(&'static str, structured_sql::SqlColumnFilter<structured_sql::SqlValue>)> {
                     use structured_sql::IntoSqlColumnFilter;
                     let mut result = Vec::new();
                     #(
-                        result.extend(self.#filter_field_names.into_sql_column_filter(stringify!(#filter_field_names)));
+                        let name = string_storage.store(&[name, "_", stringify!(#filter_field_names)]);
+                        result.extend(self.#filter_field_names.into_sql_column_filter(name, string_storage));
                     )*
                     result
                 }
@@ -636,10 +675,14 @@ impl Base {
             }
 
             impl structured_sql::IntoGenericFilter for #filter_name {
-                fn into_generic(self, column_name: Option<&'static str>) -> structured_sql::GenericFilter {
+                fn into_generic(self, string_storage: &mut structured_sql::StaticStringStorage, column_name: Option<&'static str>) -> structured_sql::GenericFilter {
                     let mut columns = std::collections::HashMap::new();
                     // TODO: Concat with column name!
-                    structured_sql::GenericFilter::insert_into_columns("variant", &mut columns, self.variant);
+                    let actual_column_name = column_name.map(|c| string_storage.store(
+                            &[c, "_", "variant"]
+                        )).unwrap_or("variant");
+
+                    structured_sql::GenericFilter::insert_into_columns(actual_column_name, &mut columns, self.variant, string_storage);
                     structured_sql::GenericFilter { columns }
                 }
             }
@@ -648,10 +691,12 @@ impl Base {
                 fn into_sql_column_filter(
                     self,
                     name: &'static str,
+                    string_storage: &mut structured_sql::StaticStringStorage,
                 ) -> Vec<(&'static str, structured_sql::SqlColumnFilter<structured_sql::SqlValue>)> {
                     use structured_sql::IntoSqlColumnFilter;
                     let mut result = Vec::new();
-                    result.extend(self.variant.into_sql_column_filter("variant"));
+                    let name = string_storage.store(&[name, "_", "variant"]);
+                    result.extend(self.variant.into_sql_column_filter(name, string_storage));
                     result
                 }
             }
@@ -698,15 +743,24 @@ impl Base {
             .filter(|m| !m.is_skipped)
             .map(|m| m.create_column_definition())
             .collect();
+        let columns_in_macro: Vec<_> = members
+            .iter()
+            .filter(|m| !m.is_skipped)
+            .map(|m| m.create_column_definition_in_macro())
+            .collect();
+        let create_prefixed_columns_macro = format_ident!("column_names_with_prefix_for_{name}");
         quote! {
             impl structured_sql::FromRow for #name {
-                fn from_row(row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Self {
-                    Self::try_from_row(row_name, row).expect("Error in serializing")
+                fn from_row(
+                    string_storage: &mut structured_sql::StaticStringStorage, row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Self {
+                    Self::try_from_row(string_storage, row_name, row).expect("Error in serializing")
                 }
 
-                fn try_from_row(row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Option<Self> {
+                fn try_from_row(string_storage: &mut structured_sql::StaticStringStorage, row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Option<Self> {
                     use structured_sql::rusqlite::OptionalExtension;
-                    #(let #field_names_with_skips = <#field_types_with_skips>::try_from_row(Some(stringify!(#field_names_with_skips)), row)?;)*
+                    #(
+                        let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
+                        let #field_names_with_skips = <#field_types_with_skips>::try_from_row(string_storage, Some(actual_column_name), row)?;)*
                     #(let #skipped_field_names = Default::default();)*
                     Some(Self {#( #field_names_without_skips),*})
                 }
@@ -731,6 +785,15 @@ impl Base {
                 ]};
 
                 const NAME: &'static str = stringify!(#table_name);
+            }
+
+            #[allow(unused_macros)]
+            macro_rules! #create_prefixed_columns_macro {
+                ($prefix:expr) => {
+                    structured_sql::konst::slice::slice_concat!{structured_sql::SqlColumn ,&[
+                    #(#columns_in_macro,)*
+                ]}
+            };
             }
         }
     }
@@ -760,12 +823,21 @@ impl Base {
             Member::create_variant_empty_columns_before(variants, &members);
         let variant_names = Member::create_variant_names(variants, &members);
         let variant_field_names = Member::create_variant_field_names(variants, &members);
+
+        let columns_in_macro: Vec<_> = members
+            .iter()
+            .filter(|m| !m.is_skipped)
+            .map(|m| m.create_column_definition_in_macro())
+            .collect();
+        let create_prefixed_columns_macro = format_ident!("column_names_with_prefix_for_{name}");
+
         quote! {
             impl structured_sql::FromRow for #name {
-                fn from_row(row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Self {
+                fn from_row(string_storage: &mut structured_sql::StaticStringStorage, row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Self {
                     use structured_sql::rusqlite::OptionalExtension;
-                    let variant = String::from_row(Some("variant"), row);
-                    #(let #field_names_with_skips = <#field_types_with_skips>::try_from_row(Some(stringify!(#field_names_with_skips)), row);)*
+                    let variant_name = row_name.map(|r| string_storage.store(&[r, "_variant"])).unwrap_or("variant");
+                    let variant = String::from_row(string_storage, Some(variant_name), row);
+                    #(let #field_names_with_skips = <#field_types_with_skips>::try_from_row(string_storage, Some(stringify!(#field_names_with_skips)), row);)*
                     match variant.as_str() {
                         #(stringify!(#variants) => {
                             #(let #variant_field_names = #variant_field_names.expect("Column belongs to variant and should have value");)*
@@ -774,10 +846,13 @@ impl Base {
                     }
                 }
 
-                fn try_from_row(row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Option<Self> {
+                fn try_from_row(string_storage: &mut structured_sql::StaticStringStorage, row_name: Option<&'static str>, row: &structured_sql::rusqlite::Row) -> Option<Self> {
                     use structured_sql::rusqlite::OptionalExtension;
-                    let variant = String::from_row(Some("variant"), row);
-                    #(let #field_names_with_skips = <#field_types_with_skips>::try_from_row(Some(stringify!(#field_names_with_skips)), row);)*
+                    let variant_name = row_name.map(|r| string_storage.store(&[r, "_variant"])).unwrap_or("variant");
+                    let variant = String::try_from_row(string_storage, Some(variant_name), row)?;
+                    #(
+                        let column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
+                        let #field_names_with_skips = <#field_types_with_skips>::try_from_row(string_storage, Some(column_name), row);)*
                     Some(match variant.as_str() {
                         #(stringify!(#variants) => {
 
@@ -841,6 +916,23 @@ impl Base {
                 ]};
 
                 const NAME: &'static str = stringify!(#table_name);
+            }
+
+            #[allow(unused_macros)]
+            macro_rules! #create_prefixed_columns_macro {
+                ($prefix:expr) => {
+                    structured_sql::konst::slice::slice_concat!{structured_sql::SqlColumn ,&[
+                        &[structured_sql::SqlColumn {
+                        name: concat!($prefix, "_variant"),
+                        r#type: structured_sql::SqlColumnType::Text,
+                        is_primary: false,
+                        is_unique: false,
+                    }],
+                    #(#columns_in_macro,)*
+                ]}
+
+
+            };
             }
         }
     }

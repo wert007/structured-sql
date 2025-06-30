@@ -2,9 +2,12 @@ use std::{
     collections::HashMap,
     ffi::{CStr, CString},
     fmt::Debug,
+    mem::MaybeUninit,
     path::Path,
+    sync::{Arc, Mutex},
 };
 
+use konst::array;
 pub use rusqlite;
 use rusqlite::{Connection, Name, OpenFlags, types::Null};
 pub use structured_sql_derive::IntoSqlTable;
@@ -25,14 +28,18 @@ mod test {
         assert_eq!(coords.as_slice(), &[]);
         Ok(())
     }
-    use std::{collections::HashMap, error::Error};
+    use std::{
+        collections::HashMap,
+        error::Error,
+        sync::{Arc, Mutex},
+    };
 
     use facet::Facet;
     use rusqlite::{Connection, OptionalExtension};
 
     use crate::{
         AsParams, Database, FromRow, GenericFilter, IntoGenericFilter, IntoSqlTable, SqlColumn,
-        SqlColumnFilter, SqlColumnType, SqlTable,
+        SqlColumnFilter, SqlColumnType, SqlTable, StaticStringStorage,
     };
 
     #[derive(Debug, PartialEq, Facet)]
@@ -60,7 +67,11 @@ mod test {
     }
 
     impl IntoGenericFilter for CoordFilter {
-        fn into_generic(self, column_name: Option<&'static str>) -> GenericFilter {
+        fn into_generic(
+            self,
+            string_storage: &mut StaticStringStorage,
+            column_name: Option<&'static str>,
+        ) -> GenericFilter {
             let mut columns = HashMap::new();
             if let Some(x) = self.x {
                 columns.insert("x", x.into_generic());
@@ -73,7 +84,11 @@ mod test {
     }
 
     impl FromRow for Coord {
-        fn from_row(row_name: Option<&'static str>, row: &rusqlite::Row) -> Self {
+        fn from_row(
+            string_storage: &mut StaticStringStorage,
+            row_name: Option<&'static str>,
+            row: &rusqlite::Row,
+        ) -> Self {
             let x: f64 = row
                 .get("x")
                 .optional()
@@ -87,7 +102,11 @@ mod test {
             Self { x, y }
         }
 
-        fn try_from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Option<Self> {
+        fn try_from_row(
+            string_storage: &mut StaticStringStorage,
+            column_name: Option<&'static str>,
+            row: &rusqlite::Row,
+        ) -> Option<Self> {
             let x: f64 = row.get("x").optional().unwrap()?;
             let y: f64 = row.get("y").optional().unwrap()?;
             Some(Self { x, y })
@@ -125,6 +144,7 @@ mod test {
 
     struct CoordTable<'a> {
         connection: &'a Connection,
+        string_storage: Arc<Mutex<StaticStringStorage>>,
     }
 
     impl<'a> SqlTable<'a> for CoordTable<'a> {
@@ -166,33 +186,80 @@ mod test {
         }
 
         fn filter(&self, filter: CoordFilter) -> Result<Vec<Coord>, rusqlite::Error> {
-            let generic = filter.into_generic(None);
-            crate::query_table_filtered::<Self::RowType>(&self.connection, generic)
+            let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+            crate::query_table_filtered::<Self::RowType>(
+                &self.connection,
+                &mut self.string_storage.lock().unwrap(),
+                generic,
+            )
         }
 
         fn delete(&self, filter: CoordFilter) -> Result<usize, rusqlite::Error> {
-            let generic = filter.into_generic(None);
+            let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
             crate::delete_table_filtered::<Self::RowType>(&self.connection, generic)
         }
 
-        fn from_connection(connection: &'a Connection) -> Self {
-            Self { connection }
+        fn from_connection(
+            connection: &'a Connection,
+            string_storage: Arc<Mutex<StaticStringStorage>>,
+        ) -> Self {
+            Self {
+                connection,
+                string_storage,
+            }
         }
+    }
+}
+
+pub struct StaticStringStorage {
+    values: Vec<&'static str>,
+}
+
+impl StaticStringStorage {
+    pub fn store(&mut self, parts: &[&'static str]) -> &'static str {
+        let value = parts.concat();
+        if let Some(v) = self.get(&value) {
+            v
+        } else {
+            let value = value.leak();
+            self.values.push(value);
+            value
+        }
+    }
+
+    fn get(&self, value: &str) -> Option<&'static str> {
+        self.values.iter().find(|v| v == &&value).copied()
+    }
+
+    fn new() -> Self {
+        Self { values: Vec::new() }
     }
 }
 
 pub struct Database {
     connection: rusqlite::Connection,
+    static_string_storage: Arc<Mutex<StaticStringStorage>>,
 }
 
 impl Database {
     pub fn create_in_memory() -> Result<Self, rusqlite::Error> {
         let connection = rusqlite::Connection::open_in_memory()?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            static_string_storage: Arc::new(Mutex::new(StaticStringStorage::new())),
+        })
     }
+
+    pub fn store(&mut self, parts: &[&'static str]) -> &'static str {
+        self.static_string_storage.lock().unwrap().store(parts)
+    }
+
     pub fn open(path: impl AsRef<Path>) -> Result<Self, rusqlite::Error> {
         let connection = rusqlite::Connection::open(path)?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            static_string_storage: Arc::new(Mutex::new(StaticStringStorage::new())),
+        })
     }
 
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), rusqlite::Error> {
@@ -202,7 +269,10 @@ impl Database {
     pub fn load<'a, T: IntoSqlTable<'a>>(&'a self) -> rusqlite::Result<T::Table> {
         self.create::<T>()?;
 
-        Ok(T::Table::from_connection(&self.connection))
+        Ok(T::Table::from_connection(
+            &self.connection,
+            self.static_string_storage.clone(),
+        ))
         // if self.table_exists(table_name)? {
         //     self.load_table::<T>(table_name)
         // } else {
@@ -263,11 +333,16 @@ impl<T: AsParams> AsParams for Option<T> {
 macro_rules! impl_as_params {
     ($t:ty) => {
         impl IntoGenericFilter for SqlColumnFilter<$t> {
-            fn into_generic(self, column_name: Option<&'static str>) -> GenericFilter {
+            fn into_generic(
+                self,
+                string_storage: &mut StaticStringStorage,
+                column_name: Option<&'static str>,
+            ) -> GenericFilter {
                 GenericFilter {
                     columns: self
                         .into_sql_column_filter(
                             column_name.expect("has no sub columns, so it needs a column name"),
+                            string_storage,
                         )
                         .into_iter()
                         .collect(),
@@ -291,11 +366,16 @@ macro_rules! impl_as_params {
         }
 
         impl FromRow for $t {
-            fn from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Self {
-                Self::try_from_row(column_name, row).expect("Value")
+            fn from_row(
+                string_storage: &mut StaticStringStorage,
+                column_name: Option<&'static str>,
+                row: &rusqlite::Row,
+            ) -> Self {
+                Self::try_from_row(string_storage, column_name, row).expect("Value")
             }
 
             fn try_from_row(
+                string_storage: &mut StaticStringStorage,
                 column_name: Option<&'static str>,
                 row: &rusqlite::Row,
             ) -> Option<Self> {
@@ -317,6 +397,7 @@ macro_rules! impl_as_params {
             fn into_sql_column_filter(
                 self,
                 name: &'static str,
+                string_storage: &mut StaticStringStorage,
             ) -> Vec<(&'static str, SqlColumnFilter<SqlValue>)> {
                 vec![(name, self.into_generic())]
             }
@@ -336,6 +417,7 @@ macro_rules! impl_as_params_and_column_filter {
             fn into_sql_column_filter(
                 self,
                 name: &'static str,
+                string_storage: &mut StaticStringStorage,
             ) -> Vec<(&'static str, SqlColumnFilter<SqlValue>)> {
                 vec![(name, self.into_generic())]
             }
@@ -387,17 +469,33 @@ related_sql_column_type!(SqlColumnType::Float, f64);
 related_sql_column_type!(SqlColumnType::Text, String);
 
 pub trait FromRow: Sized {
-    fn from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Self;
-    fn try_from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Option<Self>;
+    fn from_row(
+        string_storage: &mut StaticStringStorage,
+        column_name: Option<&'static str>,
+        row: &rusqlite::Row,
+    ) -> Self;
+    fn try_from_row(
+        string_storage: &mut StaticStringStorage,
+        column_name: Option<&'static str>,
+        row: &rusqlite::Row,
+    ) -> Option<Self>;
 }
 
 impl<T: FromRow> FromRow for Option<T> {
-    fn from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Self {
-        T::try_from_row(column_name, row)
+    fn from_row(
+        string_storage: &mut StaticStringStorage,
+        column_name: Option<&'static str>,
+        row: &rusqlite::Row,
+    ) -> Self {
+        T::try_from_row(string_storage, column_name, row)
     }
 
-    fn try_from_row(column_name: Option<&'static str>, row: &rusqlite::Row) -> Option<Self> {
-        match T::try_from_row(column_name, row) {
+    fn try_from_row(
+        string_storage: &mut StaticStringStorage,
+        column_name: Option<&'static str>,
+        row: &rusqlite::Row,
+    ) -> Option<Self> {
+        match T::try_from_row(string_storage, column_name, row) {
             Some(it) => Some(Some(it)),
             None => None,
         }
@@ -429,7 +527,10 @@ impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T> {
 
 pub trait SqlTable<'a> {
     type RowType: IntoSqlTable<'a>;
-    fn from_connection(connection: &'a Connection) -> Self;
+    fn from_connection(
+        connection: &'a Connection,
+        string_storage: Arc<Mutex<StaticStringStorage>>,
+    ) -> Self;
     fn filter(
         &self,
         filter: <Self::RowType as IntoSqlTable<'a>>::Filter,
@@ -471,6 +572,7 @@ pub trait IntoSqlColumnFilter {
     fn into_sql_column_filter(
         self,
         name: &'static str,
+        string_storage: &mut StaticStringStorage,
     ) -> Vec<(&'static str, SqlColumnFilter<SqlValue>)>;
 }
 
@@ -478,10 +580,11 @@ impl<T: IntoSqlColumnFilter + Clone + Debug> IntoSqlColumnFilter for SqlColumnFi
     fn into_sql_column_filter(
         self,
         name: &'static str,
+        string_storage: &mut StaticStringStorage,
     ) -> Vec<(&'static str, SqlColumnFilter<SqlValue>)> {
         match self {
             SqlColumnFilter::Ignored => vec![],
-            SqlColumnFilter::MustBeEqual(t) => t.into_sql_column_filter(name),
+            SqlColumnFilter::MustBeEqual(t) => t.into_sql_column_filter(name, string_storage),
         }
     }
 }
@@ -501,7 +604,11 @@ impl<T: Filterable> Filterable for Option<T> {
 }
 
 pub trait IntoGenericFilter {
-    fn into_generic(self, column_name: Option<&'static str>) -> GenericFilter;
+    fn into_generic(
+        self,
+        string_storage: &mut StaticStringStorage,
+        column_name: Option<&'static str>,
+    ) -> GenericFilter;
 }
 
 pub struct GenericFilter {
@@ -513,8 +620,9 @@ impl GenericFilter {
         name: &'static str,
         columns: &mut HashMap<&'static str, SqlColumnFilter<SqlValue>>,
         value: impl IntoSqlColumnFilter,
+        string_storage: &mut StaticStringStorage,
     ) {
-        let values = value.into_sql_column_filter(name);
+        let values = value.into_sql_column_filter(name, string_storage);
         for (name, value) in values {
             columns.insert(name, value.clone());
         }
@@ -673,6 +781,7 @@ impl Convert<f64> for SqlColumnType {
 
 pub fn query_table_filtered<'a, T: IntoSqlTable<'a>>(
     connection: &&'a rusqlite::Connection,
+    string_storage: &mut StaticStringStorage,
     filter: GenericFilter,
 ) -> Result<Vec<T>, rusqlite::Error> {
     let columns = T::COLUMNS
@@ -692,7 +801,9 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a>>(
     sql.push_str(&filter.to_sql());
     let mut statement = connection.prepare(&sql)?;
     Ok(statement
-        .query_map(filter.get_params(), |row| Ok(T::from_row(None, row)))?
+        .query_map(filter.get_params(), |row| {
+            Ok(T::from_row(string_storage, None, row))
+        })?
         .collect::<Result<_, _>>()?)
 }
 
