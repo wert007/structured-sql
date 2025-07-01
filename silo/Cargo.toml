@@ -1,5 +1,5 @@
 [package]
-name = "structured-sql"
+name = "silo"
 version = "0.1.0"
 edition = "2024"
 
@@ -13,5 +13,5 @@ konst = { version = "0.3.16", features = [
     "alloc",
 ] }
 rusqlite = { version = "0.36.0", features = ["bundled", "backup"] }
-structured-sql-derive = { path = "../structured-sql-derive/" }
+silo-derive = { path = "../silo-derive/" }
 strum = { version = "0.27.1", features = ["derive"] }

@@ -6,6 +6,6 @@ edition = "2024"
 [dependencies]
 facet = "0.27.14"
 rusqlite = { version = "0.36.0", features = ["bundled"] }
-structured-sql = { version = "0.1.0", path = "../structured-sql" }
-structured-sql-derive = { version = "0.1.0", path = "../structured-sql-derive" }
+silo = { version = "0.1.0", path = "../silo" }
+silo-derive = { version = "0.1.0", path = "../silo-derive" }
 time = "0.3.41"

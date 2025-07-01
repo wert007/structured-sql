@@ -309,6 +309,7 @@ impl Database {
             }
         }
         sql.push_str(");");
+        dbg!(&sql);
         self.connection.execute(&sql, ())?;
         Ok(())
     }

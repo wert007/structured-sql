@@ -611,6 +611,7 @@ impl Base {
                         Self::INSERT_FAILURE_BEHAVIOR.to_string(),
                         Self::RowType::NAME,
                     );
+                dbg!(&sql, &row);
                 self.connection.execute(
                     &sql,
                     row.as_params().as_slice(),

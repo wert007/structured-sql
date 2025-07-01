@@ -333,6 +333,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
+name = "silo"
+version = "0.1.0"
+dependencies = [
+ "const_format",
+ "facet",
+ "facet-reflect",
+ "konst 0.3.16",
+ "rusqlite",
+ "silo-derive",
+ "strum",
+]
+
+[[package]]
+name = "silo-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -343,28 +365,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "structured-sql"
-version = "0.1.0"
-dependencies = [
- "const_format",
- "facet",
- "facet-reflect",
- "konst 0.3.16",
- "rusqlite",
- "structured-sql-derive",
- "strum",
-]
-
-[[package]]
-name = "structured-sql-derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "strum"
@@ -405,8 +405,8 @@ version = "0.1.0"
 dependencies = [
  "facet",
  "rusqlite",
- "structured-sql",
- "structured-sql-derive",
+ "silo",
+ "silo-derive",
  "time",
 ]
 
