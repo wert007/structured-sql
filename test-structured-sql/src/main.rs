@@ -1,5 +1,7 @@
 use structured_sql::{AsParams, Database, IntoSqlTable, SqlTable};
 
+mod crashtest;
+
 #[derive(Debug, IntoSqlTable, Clone)]
 struct Point {
     x: i32,
@@ -47,17 +49,21 @@ pub enum Availability {
     Later,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, IntoSqlTable)]
-pub struct Credits {
-    #[silo(primary)]
-    id: u32,
-    cast_id: u32,
-    crew_id: u32,
+#[derive(Debug, Clone, IntoSqlTable)]
+pub struct Movie {
+    title: String,
+    url: String,
+    available: Availability,
 }
 
-#[derive(Debug, Eq, PartialEq, IntoSqlTable)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Credits {
+    cast: Vec<Cast>,
+    crew: Vec<Crew>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, IntoSqlTable)]
 pub struct Crew {
-    // credit_id: [u8; 12],
     department: String,
     gender: Option<u8>,
     id: u32,
@@ -66,11 +72,10 @@ pub struct Crew {
     profile_path: Option<String>,
 }
 
-#[derive(Debug, Eq, PartialEq, IntoSqlTable)]
+#[derive(Clone, Debug, Eq, PartialEq, IntoSqlTable)]
 pub struct Cast {
     id: u32,
     cast_id: u32,
-    // credit_id: [u8; 12],
     character: String,
     gender: Option<u8>,
     name: String,
@@ -78,7 +83,7 @@ pub struct Cast {
     order: u8,
 }
 
-#[derive(Debug, PartialEq, IntoSqlTable)]
+#[derive(Clone, Debug, PartialEq, IntoSqlTable)]
 pub struct Genre {
     #[silo(primary)]
     id: u16,
@@ -91,7 +96,7 @@ pub struct MovieWithGenres {
     genre_id: u16,
 }
 
-#[derive(Debug, PartialEq, IntoSqlTable)]
+#[derive(Clone, Debug, PartialEq, IntoSqlTable)]
 pub struct TmdbMovie {
     #[silo(primary)]
     id: u32,
@@ -102,15 +107,17 @@ pub struct TmdbMovie {
     original_language: String,
     overview: Option<String>,
     // #[silo(skip)]
-    // release_date: time::Date,
+    release_date: String,
     runtime: u32,
     homepage: Option<String>,
-    // genres: Vec<Genre>,
+    #[silo(skip)]
+    genres: Vec<Genre>,
     poster_path: Option<String>,
     backdrop_path: Option<String>,
     popularity: f64,
     budget: u64,
     adult: bool,
+    #[silo(skip)]
     credits: Option<Credits>,
 }
 
@@ -119,11 +126,24 @@ pub struct FutureMovie {
     pub url: String,
 }
 
+#[derive(Clone, Debug, IntoSqlTable)]
+pub struct MovieWithRatings {
+    pub(crate) movie: Movie,
+    pub(crate) ratings: TmdbMovie,
+}
+
 const _: () = const { assert!(matches!(Point::COLUMNS.len(), 2)) };
 // const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
 const _: () = const { assert!(matches!(Fruit::COLUMNS.len(), 1)) };
 const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
 const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
+
+#[derive(Debug, IntoSqlTable)]
+struct FooWithVec {
+    #[silo(primary)]
+    id: u32,
+    values: Vec<String>,
+}
 
 fn main() {
     dbg!(Test::COLUMNS);
@@ -153,9 +173,39 @@ fn main() {
     _ = dbg!(test.filter(f));
     test_db.save("test.db").unwrap();
 
-    let table = test_db.load::<FutureMovie>().unwrap();
-    let result = table.filter(FutureMovieFilter::default()).unwrap();
-    table.delete(FutureMovieFilter::default()).unwrap();
-    dbg!(result.into_iter().map(|f| f.url).collect::<Vec<_>>());
+    crashtest::crash_test();
+    // let table = test_db.load::<TmdbMovie>().unwrap();
+    // table
+    //     .insert(TmdbMovie {
+    //         id: 0,
+    //         imdb_id: 0,
+    //         title: "Hello!".into(),
+    //         tagline: "Hello!".into(),
+    //         original_title: "Hello!".into(),
+    //         original_language: "Hello!".into(),
+    //         overview: None,
+    //         runtime: 5,
+    //         homepage: None,
+    //         poster_path: None,
+    //         backdrop_path: None,
+    //         popularity: 4.0,
+    //         budget: 2,
+    //         adult: true,
+    //         credits: None,
+    //     })
+    //     .unwrap();
+    let table = test_db.load::<MovieWithRatings>().unwrap();
+    for e in crashtest::crash_test() {
+        table.insert(e).unwrap();
+    }
+    let table = test_db.load::<Movie>().unwrap();
+    table
+        .insert(Movie {
+            title: "Hello".into(),
+            url: "dotcom".into(),
+            available: Availability::Later,
+        })
+        .unwrap();
+    // dbg!(result.into_iter().map(|f| f.url).collect::<Vec<_>>());
     println!("Hello, world!");
 }

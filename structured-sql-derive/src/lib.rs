@@ -482,7 +482,7 @@ impl Member {
 
     fn type_to_name(type_: &Type) -> Ident {
         match type_ {
-            Type::Path(type_path) => type_path.path.get_ident().unwrap().clone(),
+            Type::Path(type_path) => type_path.path.segments.last().unwrap().ident.clone(),
             _ => todo!(),
         }
     }
