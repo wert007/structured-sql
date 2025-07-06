@@ -5,8 +5,6 @@ edition = "2024"
 
 [dependencies]
 const_format = { version = "0.2.34", features = ["rust_1_83"] }
-facet = "0.27.14"
-facet-reflect = "0.27.14"
 konst = { version = "0.3.16", features = [
     "rust_latest_stable",
     "rust_1_83",

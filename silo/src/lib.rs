@@ -31,7 +31,6 @@ mod test {
         sync::{Arc, Mutex},
     };
 
-    use facet::Facet;
     use rusqlite::{Connection, OptionalExtension};
 
     use crate::{
@@ -39,7 +38,7 @@ mod test {
         SqlColumnFilter, SqlColumnType, SqlTable, StaticStringStorage,
     };
 
-    #[derive(Debug, PartialEq, Facet)]
+    #[derive(Debug, PartialEq)]
     struct Coord {
         x: f64,
         y: f64,
