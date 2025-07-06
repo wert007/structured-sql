@@ -286,6 +286,8 @@ impl Member {
         let is_unique = syn::LitBool::new(*is_unique, name.span());
         let is_primary = syn::LitBool::new(*is_primary, name.span());
         let snake_case_name = name.to_snake_case();
+        let snake_case_name = format_ident!("{snake_case_name}");
+
         if let Some(t) = Member::as_simple_type(type_, *is_optional, self.supports_vec) {
             quote! { &[silo::SqlColumn {
                 name: stringify!(#snake_case_name),
@@ -313,9 +315,10 @@ impl Member {
         let is_unique = syn::LitBool::new(*is_unique, name.span());
         let is_primary = syn::LitBool::new(*is_primary, name.span());
         let snake_case_name = name.to_snake_case();
+        let snake_case_name = format_ident!("_{snake_case_name}");
         if let Some(t) = Member::as_simple_type(type_, *is_optional, self.supports_vec) {
             quote! { &[silo::SqlColumn {
-                name: concat!($prefix, "_", stringify!(#snake_case_name)),
+                name: concat!($prefix, stringify!(#snake_case_name)),
                 r#type: #t,
                 is_unique: #is_unique,
                 is_primary: #is_primary,
@@ -324,7 +327,7 @@ impl Member {
             let type_name =
                 Member::type_to_name(Member::try_strip_auxiliary(self.supports_vec, type_));
             let column_macro_name = format_ident!("column_names_with_prefix_for_{type_name}");
-            quote! { &#column_macro_name!(concat!($prefix, "_", stringify!(#snake_case_name))) }
+            quote! { &#column_macro_name!(concat!($prefix, stringify!(#snake_case_name))) }
         }
     }
 
