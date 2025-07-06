@@ -1,16 +1,13 @@
 use std::{
     collections::HashMap,
-    ffi::{CStr, CString},
     fmt::Debug,
-    mem::MaybeUninit,
     path::Path,
     sync::{Arc, Mutex},
 };
 
-use konst::array;
 pub use rusqlite;
-use rusqlite::{Connection, Name, OpenFlags, types::Null};
-pub use structured_sql_derive::IntoSqlTable;
+use rusqlite::{Connection, types::Null};
+pub use silo_derive::{IntoSqlTable, IntoSqlVecTable};
 
 pub use konst;
 
@@ -84,24 +81,6 @@ mod test {
     }
 
     impl FromRow for Coord {
-        fn from_row(
-            string_storage: &mut StaticStringStorage,
-            row_name: Option<&'static str>,
-            row: &rusqlite::Row,
-        ) -> Self {
-            let x: f64 = row
-                .get("x")
-                .optional()
-                .unwrap()
-                .expect("Implement missing columns");
-            let y: f64 = row
-                .get("y")
-                .optional()
-                .unwrap()
-                .expect("Implement missing columns");
-            Self { x, y }
-        }
-
         fn try_from_row(
             string_storage: &mut StaticStringStorage,
             column_name: Option<&'static str>,
@@ -282,6 +261,18 @@ impl Database {
         // } else {
         // }
     }
+    pub fn load2<'a, T: IntoSqlVecTable<'a>>(&'a self) -> rusqlite::Result<T::Table> {
+        self.create2::<T>()?;
+
+        Ok(T::Table::from_connection(
+            &self.connection,
+            self.static_string_storage.clone(),
+        ))
+        // if self.table_exists(table_name)? {
+        //     self.load_table::<T>(table_name)
+        // } else {
+        // }
+    }
 
     // fn table_exists(&self, table_name: &str) -> rusqlite::Result<bool> {
     //     let mut exists = self
@@ -301,7 +292,32 @@ impl Database {
             if i > 0 {
                 sql.push_str(",");
             }
+            sql.push('"');
             sql.push_str(column.name);
+            sql.push('"');
+            sql.push_str(" ");
+            sql.push_str(column.r#type.as_sql());
+            if column.is_unique {
+                sql.push_str(" UNIQUE");
+            }
+        }
+        sql.push_str(");");
+        dbg!(&sql);
+        self.connection.execute(&sql, ())?;
+        Ok(())
+    }
+
+    fn create2<'a, T: IntoSqlVecTable<'a>>(&'a self) -> Result<(), rusqlite::Error> {
+        let mut sql = "CREATE TABLE IF NOT EXISTS ".to_string();
+        sql.push_str(T::NAME);
+        sql.push_str(" (");
+        for (i, column) in T::COLUMNS.into_iter().enumerate() {
+            if i > 0 {
+                sql.push_str(", ");
+            }
+            sql.push('"');
+            sql.push_str(column.name);
+            sql.push('"');
             sql.push_str(" ");
             sql.push_str(column.r#type.as_sql());
             if column.is_unique {
@@ -322,9 +338,30 @@ impl Database {
     // }
 }
 
+pub trait AsRepeatedParams {
+    const PARAM_COUNT: usize;
+    fn as_params<'b>(&'b self) -> Vec<Vec<&'b dyn rusqlite::ToSql>>;
+}
+
 pub trait AsParams {
     const PARAM_COUNT: usize;
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
+}
+
+impl<T: AsParams> AsRepeatedParams for T {
+    const PARAM_COUNT: usize = T::PARAM_COUNT;
+
+    fn as_params<'b>(&'b self) -> Vec<Vec<&'b dyn rusqlite::ToSql>> {
+        vec![self.as_params()]
+    }
+}
+
+impl<T: AsParams> AsRepeatedParams for Vec<T> {
+    const PARAM_COUNT: usize = T::PARAM_COUNT;
+
+    fn as_params<'b>(&'b self) -> Vec<Vec<&'b dyn rusqlite::ToSql>> {
+        self.iter().map(|v| v.as_params()).collect()
+    }
 }
 
 impl<T: AsParams> AsParams for Option<T> {
@@ -374,16 +411,8 @@ macro_rules! impl_as_params {
         }
 
         impl FromRow for $t {
-            fn from_row(
-                string_storage: &mut StaticStringStorage,
-                column_name: Option<&'static str>,
-                row: &rusqlite::Row,
-            ) -> Self {
-                Self::try_from_row(string_storage, column_name, row).expect("Value")
-            }
-
             fn try_from_row(
-                string_storage: &mut StaticStringStorage,
+                _string_storage: &mut StaticStringStorage,
                 column_name: Option<&'static str>,
                 row: &rusqlite::Row,
             ) -> Option<Self> {
@@ -405,7 +434,7 @@ macro_rules! impl_as_params {
             fn into_sql_column_filter(
                 self,
                 name: &'static str,
-                string_storage: &mut StaticStringStorage,
+                _string_storage: &mut StaticStringStorage,
             ) -> Vec<(&'static str, SqlColumnFilter<SqlValue>)> {
                 vec![(name, self.into_generic())]
             }
@@ -425,7 +454,7 @@ macro_rules! impl_as_params_and_column_filter {
             fn into_sql_column_filter(
                 self,
                 name: &'static str,
-                string_storage: &mut StaticStringStorage,
+                _string_storage: &mut StaticStringStorage,
             ) -> Vec<(&'static str, SqlColumnFilter<SqlValue>)> {
                 vec![(name, self.into_generic())]
             }
@@ -438,9 +467,11 @@ impl_as_params!(i8);
 impl_as_params!(i16);
 impl_as_params!(i32);
 impl_as_params!(i64);
+impl_as_params!(isize);
 impl_as_params!(u8);
 impl_as_params!(u16);
 impl_as_params!(u32);
+impl_as_params!(usize);
 impl_as_params!(u64);
 impl_as_params!(f32);
 impl_as_params!(f64);
@@ -468,20 +499,17 @@ related_sql_column_type!(SqlColumnType::Integer, i8);
 related_sql_column_type!(SqlColumnType::Integer, i16);
 related_sql_column_type!(SqlColumnType::Integer, i32);
 related_sql_column_type!(SqlColumnType::Integer, i64);
+related_sql_column_type!(SqlColumnType::Integer, isize);
 related_sql_column_type!(SqlColumnType::Integer, u8);
 related_sql_column_type!(SqlColumnType::Integer, u16);
 related_sql_column_type!(SqlColumnType::Integer, u32);
 related_sql_column_type!(SqlColumnType::Integer, u64);
+related_sql_column_type!(SqlColumnType::Integer, usize);
 related_sql_column_type!(SqlColumnType::Float, f32);
 related_sql_column_type!(SqlColumnType::Float, f64);
 related_sql_column_type!(SqlColumnType::Text, String);
 
 pub trait FromRow: Sized {
-    fn from_row(
-        string_storage: &mut StaticStringStorage,
-        column_name: Option<&'static str>,
-        row: &rusqlite::Row,
-    ) -> Self;
     fn try_from_row(
         string_storage: &mut StaticStringStorage,
         column_name: Option<&'static str>,
@@ -490,14 +518,6 @@ pub trait FromRow: Sized {
 }
 
 impl<T: FromRow> FromRow for Option<T> {
-    fn from_row(
-        string_storage: &mut StaticStringStorage,
-        column_name: Option<&'static str>,
-        row: &rusqlite::Row,
-    ) -> Self {
-        T::try_from_row(string_storage, column_name, row)
-    }
-
     fn try_from_row(
         string_storage: &mut StaticStringStorage,
         column_name: Option<&'static str>,
@@ -510,13 +530,32 @@ impl<T: FromRow> FromRow for Option<T> {
     }
 }
 
+pub trait FromGroupedRows: Sized {
+    type RowType: FromRow;
+    fn try_from_rows(
+        string_storage: &mut StaticStringStorage,
+        column_name: Option<&'static str>,
+        rows: Vec<Self::RowType>,
+    ) -> Option<Self>;
+}
+
+impl<T: FromRow> FromGroupedRows for Vec<T> {
+    fn try_from_rows(
+        string_storage: &mut StaticStringStorage,
+        column_name: Option<&'static str>,
+        rows: Vec<Self::RowType>,
+    ) -> Option<Self> {
+        Some(rows)
+    }
+
+    type RowType = T;
+}
+
 pub trait IntoSqlTable<'a>: FromRow + AsParams {
     const COLUMNS: &'static [SqlColumn];
     const NAME: &'static str;
     type Table: SqlTable<'a>;
     type Filter: IntoGenericFilter;
-
-    // fn table_as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
 }
 
 impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T> {
@@ -527,11 +566,26 @@ impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T> {
     type Table = T::Table;
 
     type Filter = T::Filter;
-
-    // fn table_as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
-    //     unreachable!()
-    // }
 }
+
+pub trait IntoSqlVecTable<'a>:
+    FromGroupedRows<RowType: FromRowWithPrimary> + AsRepeatedParams
+{
+    const COLUMNS: &'static [SqlColumn];
+    const NAME: &'static str;
+    type Table: SqlVecTable<'a>;
+    type Filter: IntoGenericFilter;
+}
+
+// impl<'a, T: IntoSqlVecTable<'a>> IntoSqlVecTable<'a> for Option<T> {
+//     const COLUMNS: &'static [SqlColumn] = T::COLUMNS;
+
+//     const NAME: &'static str = T::NAME;
+
+//     type Table = T::Table;
+
+//     type Filter = T::Filter;
+// }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum SqlFailureBehavior {
@@ -572,6 +626,29 @@ pub trait SqlTable<'a> {
     ) -> Result<usize, rusqlite::Error>;
 
     fn insert(&self, row: Self::RowType) -> Result<(), rusqlite::Error>;
+}
+
+pub trait FromRowWithPrimary: FromRow {
+    fn primary(&self) -> usize;
+}
+
+pub trait SqlVecTable<'a> {
+    type GroupedRowType: IntoSqlVecTable<'a>;
+    const INSERT_FAILURE_BEHAVIOR: SqlFailureBehavior;
+    fn from_connection(
+        connection: &'a Connection,
+        string_storage: Arc<Mutex<StaticStringStorage>>,
+    ) -> Self;
+    fn filter(
+        &self,
+        filter: <Self::GroupedRowType as IntoSqlVecTable<'a>>::Filter,
+    ) -> Result<Vec<Self::GroupedRowType>, rusqlite::Error>;
+    fn delete(
+        &self,
+        filter: <Self::GroupedRowType as IntoSqlVecTable<'a>>::Filter,
+    ) -> Result<usize, rusqlite::Error>;
+
+    fn insert(&self, row: Self::GroupedRowType) -> Result<(), rusqlite::Error>;
 }
 
 #[derive(Default, Clone, Debug)]
@@ -631,6 +708,15 @@ impl<T: Filterable> Filterable for Option<T> {
 
     fn must_be_equal(self) -> Self::Filtered {
         self.unwrap().must_be_equal()
+    }
+}
+
+impl<T: Filterable> Filterable for Vec<T> {
+    type Filtered = T::Filtered;
+
+    fn must_be_equal(self) -> Self::Filtered {
+        // self.unwrap().must_be_equal()
+        todo!()
     }
 }
 
@@ -724,9 +810,11 @@ into_sql_value_integer!(i8);
 into_sql_value_integer!(i16);
 into_sql_value_integer!(i32);
 into_sql_value_integer!(i64);
+into_sql_value_integer!(isize);
 into_sql_value_integer!(u8);
 into_sql_value_integer!(u16);
 into_sql_value_integer!(u32);
+into_sql_value_integer!(usize);
 into_sql_value_integer!(u64);
 
 impl Into<SqlValue> for String {
@@ -748,7 +836,7 @@ impl SqlValue {
             SqlValue::Integer(it) => it.to_string(),
             SqlValue::Null => "NULL".to_string(),
             SqlValue::Text(it) => format!("{it:?}"),
-            SqlValue::Blob(items) => todo!(),
+            SqlValue::Blob(_items) => todo!(),
         }
     }
 }
@@ -838,12 +926,65 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a>>(
     let mut statement = connection.prepare(&sql)?;
     Ok(statement
         .query_map(filter.get_params(), |row| {
-            Ok(T::from_row(string_storage, None, row))
+            Ok(T::try_from_row(string_storage, None, row).unwrap())
         })?
         .collect::<Result<_, _>>()?)
 }
 
+pub fn query_vec_table_filtered<'a, T: IntoSqlVecTable<'a>>(
+    connection: &&'a rusqlite::Connection,
+    string_storage: &mut StaticStringStorage,
+    filter: GenericFilter,
+) -> Result<Vec<T>, rusqlite::Error> {
+    let columns = T::COLUMNS
+        .into_iter()
+        .map(|c| c.name)
+        .fold(String::new(), |mut acc, cur| {
+            if acc.is_empty() {
+                cur.into()
+            } else {
+                acc.push_str(", ");
+                acc.push_str(cur);
+                acc
+            }
+        });
+    let mut sql = format!("SELECT {columns} from {}", T::NAME);
+    sql.push(' ');
+    sql.push_str(&filter.to_sql());
+    let mut statement = connection.prepare(&sql)?;
+    let result: Result<Vec<_>, _> = statement
+        .query_map(filter.get_params(), |r| {
+            let result =
+                <T as FromGroupedRows>::RowType::try_from_row(string_storage, None, r).unwrap();
+
+            Ok((result.primary(), result))
+        })?
+        .collect();
+    let result = result?;
+    let result: HashMap<usize, Vec<<T as FromGroupedRows>::RowType>> =
+        result.into_iter().fold(HashMap::new(), |mut a, (k, v)| {
+            a.entry(k).or_default().push(v);
+            a
+        });
+    let result = result
+        .into_iter()
+        .map(|(_p, v)| <T as FromGroupedRows>::try_from_rows(string_storage, None, v).unwrap())
+        .collect();
+    Ok(result)
+}
+
 pub fn delete_table_filtered<'a, T: IntoSqlTable<'a>>(
+    connection: &&'a rusqlite::Connection,
+    filter: GenericFilter,
+) -> Result<usize, rusqlite::Error> {
+    let mut sql = format!("DELETE FROM {}", T::NAME);
+    sql.push(' ');
+    sql.push_str(&filter.to_sql());
+    let mut statement = connection.prepare(&sql)?;
+    Ok(statement.execute(filter.get_params())?)
+}
+
+pub fn delete_vec_table_filtered<'a, T: IntoSqlVecTable<'a>>(
     connection: &&'a rusqlite::Connection,
     filter: GenericFilter,
 ) -> Result<usize, rusqlite::Error> {

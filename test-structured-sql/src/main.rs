@@ -1,4 +1,4 @@
-use structured_sql::{AsParams, Database, IntoSqlTable, SqlTable};
+use silo::{AsParams, Database, IntoSqlTable, IntoSqlVecTable, SqlTable, SqlVecTable};
 
 mod crashtest;
 
@@ -138,10 +138,10 @@ const _: () = const { assert!(matches!(Fruit::COLUMNS.len(), 1)) };
 const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
 const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 
-#[derive(Debug, IntoSqlTable)]
+#[derive(Debug, IntoSqlVecTable)]
 struct FooWithVec {
     #[silo(primary)]
-    id: u32,
+    iddasda: usize,
     values: Vec<String>,
 }
 
@@ -162,18 +162,18 @@ fn main() {
     .unwrap();
     let f = TestFilter {
         value1: (PointFilter {
-            x: structured_sql::SqlColumnFilter::MustBeEqual(12),
+            x: silo::SqlColumnFilter::MustBeEqual(12),
             ..Default::default()
         }),
         // value3: (FruitWithDataFilter {
-        //     filter: structured_sql::SqlColumnFilter::MustBeEqual("Banana"),
+        //     filter: silo::SqlColumnFilter::MustBeEqual("Banana"),
         // }),
         ..Default::default()
     };
     _ = dbg!(test.filter(f));
     test_db.save("test.db").unwrap();
 
-    crashtest::crash_test();
+    // crashtest::crash_test();
     // let table = test_db.load::<TmdbMovie>().unwrap();
     // table
     //     .insert(TmdbMovie {
@@ -194,18 +194,39 @@ fn main() {
     //         credits: None,
     //     })
     //     .unwrap();
-    let table = test_db.load::<MovieWithRatings>().unwrap();
-    for e in crashtest::crash_test() {
-        table.insert(e).unwrap();
-    }
-    let table = test_db.load::<Movie>().unwrap();
-    table
-        .insert(Movie {
-            title: "Hello".into(),
-            url: "dotcom".into(),
-            available: Availability::Later,
-        })
-        .unwrap();
+    // let table = test_db.load::<MovieWithRatings>().unwrap();
+    // for e in crashtest::crash_test() {
+    //     table.insert(e).unwrap();
+    // }
+    // let table = test_db.load::<Movie>().unwrap();
+    // table
+    //     .insert(Movie {
+    //         title: "Hello".into(),
+    //         url: "dotcom".into(),
+    //         available: Availability::Later,
+    //     })
+    //     .unwrap();
     // dbg!(result.into_iter().map(|f| f.url).collect::<Vec<_>>());
+
+    let vt = test_db.load2::<FooWithVec>().unwrap();
+    vt.insert(FooWithVec {
+        iddasda: 0,
+        values: vec![
+            "1".into(),
+            "1".into(),
+            "1".into(),
+            "1".into(),
+            "1".into(),
+            "1".into(),
+            "1".into(),
+            "1".into(),
+            "1".into(),
+            "1".into(),
+            "1".into(),
+            "1".into(),
+        ],
+    })
+    .unwrap();
+    test_db.save("test.db").unwrap();
     println!("Hello, world!");
 }
