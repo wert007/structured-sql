@@ -1,3 +1,4 @@
+use heck::{ToSnakeCase, ToSnekCase};
 use ident_case_conversions::CaseConversions;
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
@@ -285,12 +286,12 @@ impl Member {
         } = self;
         let is_unique = syn::LitBool::new(*is_unique, name.span());
         let is_primary = syn::LitBool::new(*is_primary, name.span());
-        let snake_case_name = name.to_snake_case();
-        let snake_case_name = format_ident!("{snake_case_name}");
+        let snake_case_name = name.to_string().trim_start_matches("r#").to_snake_case();
+        let snake_case_name = syn::LitStr::new(&snake_case_name, name.span());
 
         if let Some(t) = Member::as_simple_type(type_, *is_optional, self.supports_vec) {
             quote! { &[silo::SqlColumn {
-                name: stringify!(#snake_case_name),
+                name: #snake_case_name,
                 r#type: #t,
                 is_unique: #is_unique,
                 is_primary: #is_primary,
@@ -299,7 +300,7 @@ impl Member {
             let type_name =
                 Member::type_to_name(Member::try_strip_auxiliary(self.supports_vec, type_));
             let column_macro_name = format_ident!("column_names_with_prefix_for_{type_name}");
-            quote! { &#column_macro_name!(stringify!(#snake_case_name)) }
+            quote! { &#column_macro_name!(#snake_case_name) }
         }
     }
 
@@ -314,11 +315,12 @@ impl Member {
         } = self;
         let is_unique = syn::LitBool::new(*is_unique, name.span());
         let is_primary = syn::LitBool::new(*is_primary, name.span());
-        let snake_case_name = name.to_snake_case();
-        let snake_case_name = format_ident!("_{snake_case_name}");
+        let snake_case_name = name.to_string().trim_start_matches("r#").to_snake_case();
+        let snake_case_name = syn::LitStr::new(&format!("_{snake_case_name}"), name.span());
+
         if let Some(t) = Member::as_simple_type(type_, *is_optional, self.supports_vec) {
             quote! { &[silo::SqlColumn {
-                name: concat!($prefix, stringify!(#snake_case_name)),
+                name: concat!($prefix, #snake_case_name),
                 r#type: #t,
                 is_unique: #is_unique,
                 is_primary: #is_primary,
@@ -327,7 +329,7 @@ impl Member {
             let type_name =
                 Member::type_to_name(Member::try_strip_auxiliary(self.supports_vec, type_));
             let column_macro_name = format_ident!("column_names_with_prefix_for_{type_name}");
-            quote! { &#column_macro_name!(concat!($prefix, stringify!(#snake_case_name))) }
+            quote! { &#column_macro_name!(concat!($prefix, #snake_case_name)) }
         }
     }
 

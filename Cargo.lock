@@ -356,6 +356,7 @@ dependencies = [
 name = "silo-derive"
 version = "0.1.0"
 dependencies = [
+ "heck",
  "ident_case_conversions",
  "proc-macro2",
  "quote",
