@@ -918,6 +918,7 @@ impl Base {
             filter_name,
             partial_name,
             members,
+            visibility,
             ..
         } = self;
         let field_names_with_skips: Vec<_> = members
@@ -954,7 +955,7 @@ impl Base {
                 type Partial = #partial_name;
             }
 
-            struct #partial_name {
+            #visibility struct #partial_name {
                 #(#partial_field_definitions,)*
             }
 
