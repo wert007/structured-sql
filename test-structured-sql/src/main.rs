@@ -2,7 +2,6 @@ use silo::{
     AsParams, Database, IntoSqlTable, IntoSqlVecTable, MigrationHandler, PartialType, SqlTable,
     SqlVecTable,
 };
-use time::{Date, OffsetDateTime, Time};
 
 mod crashtest;
 

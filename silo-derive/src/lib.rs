@@ -426,11 +426,15 @@ impl Member {
         is_optional: bool,
         supports_vec: bool,
     ) -> Option<proc_macro2::TokenStream> {
+        let mut seen_path = Vec::with_capacity(path.segments.len());
         for segment in &path.segments {
-            if let Some(result) = Member::ident_as_simple_type(&segment.ident, is_optional) {
+            if let Some(result) =
+                Member::ident_as_simple_type(&segment.ident, is_optional, &seen_path)
+            {
                 return Some(result);
             }
             if segment.ident.to_string() == "time" {
+                seen_path.push(segment);
                 continue;
             }
             return match segment.ident.to_string().as_str() {
@@ -462,14 +466,22 @@ impl Member {
         None
     }
 
-    fn ident_as_simple_type(ident: &Ident, is_optional: bool) -> Option<proc_macro2::TokenStream> {
+    fn ident_as_simple_type(
+        ident: &Ident,
+        is_optional: bool,
+        seen_path: &[&syn::PathSegment],
+    ) -> Option<proc_macro2::TokenStream> {
         match ident.to_string().as_str() {
             "bool" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "usize"
             | "isize" | "String" | "f32" | "f64" | "Time" | "Date" | "OffsetDateTime" => {
                 if is_optional {
-                    Some(quote! {< Option<#ident> as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE})
+                    Some(
+                        quote! {< Option<#(#seen_path::)*#ident> as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE},
+                    )
                 } else {
-                    Some(quote! {< #ident as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE})
+                    Some(
+                        quote! {< #(#seen_path::)*#ident as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE},
+                    )
                 }
             }
             _ => None,
