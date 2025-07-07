@@ -716,7 +716,6 @@ impl Base {
                         Self::INSERT_FAILURE_BEHAVIOR.to_string(),
                         Self::RowType::NAME,
                     );
-                dbg!(&sql, &row);
                 self.connection.execute(
                     &sql,
                     row.as_params().as_slice(),
@@ -1243,10 +1242,7 @@ impl BaseVec {
                         Self::INSERT_FAILURE_BEHAVIOR.to_string(),
                         Self::GroupedRowType::NAME,
                     );
-                dbg!(&sql, &row);
-                dbg!(row.as_params().len(), row.as_params().iter().map(|v| v.len()).collect::<Vec<_>>());
                 for entry in &row.as_params() {
-                    dbg!(&entry.len());
                     self.connection.execute(
                         &sql,
                         entry.as_slice(),
@@ -1477,7 +1473,7 @@ impl BaseVec {
                     let mut result = Vec::new();
                     #(
                         let values = <#field_types_with_skips as silo::AsRepeatedParams>::as_params(&self.#field_names_with_skips);
-                        dbg!(&self.#field_names_with_skips, values.len());
+                        // dbg!(&self.#field_names_with_skips, values.len());
                         result.extend(values));*
                     ;
                     result
