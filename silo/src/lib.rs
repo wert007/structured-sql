@@ -10,6 +10,9 @@ use rusqlite::{Connection, types::Null};
 pub use silo_derive::{IntoSqlTable, IntoSqlVecTable};
 
 pub use konst;
+use time::macros::format_description;
+use time::{Date, Time};
+use time::{OffsetDateTime, format_description::FormatItem};
 
 #[cfg(test)]
 mod test {
@@ -460,6 +463,9 @@ macro_rules! impl_as_params_and_column_filter {
 }
 
 impl_as_params!(bool);
+impl_as_params!(Time);
+impl_as_params!(Date);
+impl_as_params!(OffsetDateTime);
 impl_as_params!(i8);
 impl_as_params!(i16);
 impl_as_params!(i32);
@@ -505,6 +511,9 @@ related_sql_column_type!(SqlColumnType::Integer, usize);
 related_sql_column_type!(SqlColumnType::Float, f32);
 related_sql_column_type!(SqlColumnType::Float, f64);
 related_sql_column_type!(SqlColumnType::Text, String);
+related_sql_column_type!(SqlColumnType::Text, Time);
+related_sql_column_type!(SqlColumnType::Text, Date);
+related_sql_column_type!(SqlColumnType::Text, OffsetDateTime);
 
 pub trait FromRow: Sized {
     fn try_from_row(
@@ -512,6 +521,18 @@ pub trait FromRow: Sized {
         column_name: Option<&'static str>,
         row: &rusqlite::Row,
     ) -> Option<Self>;
+}
+
+pub trait PartialType<T> {
+    fn transpose(self) -> Option<T>;
+}
+
+pub trait HasPartialRepresentation {
+    type Partial;
+}
+
+pub trait MigrationHandler: Sized + HasPartialRepresentation {
+    fn handle_migration(partial: Self::Partial) -> Option<Self>;
 }
 
 impl<T: FromRow> FromRow for Option<T> {
@@ -823,6 +844,34 @@ impl Into<SqlValue> for String {
 impl Into<SqlValue> for &str {
     fn into(self) -> SqlValue {
         SqlValue::Text(self.into())
+    }
+}
+
+impl Into<SqlValue> for Time {
+    fn into(self) -> SqlValue {
+        const TIME_FORMAT: &[FormatItem<'_>] = format_description!(
+            version = 2,
+            "[hour]:[minute][optional [:[second][optional [.[subsecond]]]]]"
+        );
+        SqlValue::Text(self.format(&TIME_FORMAT).unwrap())
+    }
+}
+
+impl Into<SqlValue> for Date {
+    fn into(self) -> SqlValue {
+        const DATE_FORMAT: &[FormatItem<'_>] =
+            format_description!(version = 2, "[year]-[month]-[day]");
+        SqlValue::Text(self.format(&DATE_FORMAT).unwrap())
+    }
+}
+
+impl Into<SqlValue> for OffsetDateTime {
+    fn into(self) -> SqlValue {
+        const OFFSET_DATE_TIME_ENCODING: &[FormatItem<'_>] = format_description!(
+            version = 2,
+            "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond][offset_hour sign:mandatory]:[offset_minute]"
+        );
+        SqlValue::Text(self.format(&OFFSET_DATE_TIME_ENCODING).unwrap())
     }
 }
 

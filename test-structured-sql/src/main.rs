@@ -1,4 +1,8 @@
-use silo::{AsParams, Database, IntoSqlTable, IntoSqlVecTable, SqlTable, SqlVecTable};
+use silo::{
+    AsParams, Database, IntoSqlTable, IntoSqlVecTable, MigrationHandler, PartialType, SqlTable,
+    SqlVecTable,
+};
+use time::{Date, OffsetDateTime, Time};
 
 mod crashtest;
 
@@ -107,7 +111,7 @@ pub struct TmdbMovie {
     original_language: String,
     overview: Option<String>,
     // #[silo(skip)]
-    release_date: String,
+    release_date: time::OffsetDateTime,
     runtime: u32,
     homepage: Option<String>,
     #[silo(skip)]
@@ -119,6 +123,17 @@ pub struct TmdbMovie {
     adult: bool,
     #[silo(skip)]
     credits: Option<Credits>,
+}
+
+impl MigrationHandler for TmdbMovie {
+    fn handle_migration(mut partial: Self::Partial) -> Option<Self> {
+        if partial.release_date.is_none() {
+            partial.release_date = Some(time::OffsetDateTime::now_utc());
+        }
+        partial.genres = Some(Vec::new());
+        partial.credits = Some(None);
+        partial.transpose()
+    }
 }
 
 #[derive(Debug, Clone, IntoSqlTable)]

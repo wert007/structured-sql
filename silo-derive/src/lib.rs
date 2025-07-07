@@ -430,6 +430,9 @@ impl Member {
             if let Some(result) = Member::ident_as_simple_type(&segment.ident, is_optional) {
                 return Some(result);
             }
+            if segment.ident.to_string() == "time" {
+                continue;
+            }
             return match segment.ident.to_string().as_str() {
                 "Option" => match &segment.arguments {
                     syn::PathArguments::AngleBracketed(angle_bracketed_generic_arguments) => {
@@ -462,7 +465,7 @@ impl Member {
     fn ident_as_simple_type(ident: &Ident, is_optional: bool) -> Option<proc_macro2::TokenStream> {
         match ident.to_string().as_str() {
             "bool" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "usize"
-            | "isize" | "String" | "f32" | "f64" => {
+            | "isize" | "String" | "f32" | "f64" | "Time" | "Date" | "OffsetDateTime" => {
                 if is_optional {
                     Some(quote! {< Option<#ident> as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE})
                 } else {
@@ -589,12 +592,18 @@ impl Member {
     fn create_single_field_type(&self) -> &Type {
         Member::try_strip_vec(&self.type_)
     }
+
+    fn create_partial_field_definition(&self) -> proc_macro2::TokenStream {
+        let Member { name, type_, .. } = self;
+        quote! { #name: Option<#type_>}
+    }
 }
 
 struct Base {
     name: Ident,
     table_name: Ident,
     filter_name: Ident,
+    partial_name: Ident,
     visibility: Visibility,
     variants: Option<Vec<Ident>>,
     members: Vec<Member>,
@@ -623,12 +632,14 @@ impl Base {
         let on_conflict = attribute_struct_data.on_conflict();
         let table_name = format_ident!("{name}Table");
         let filter_name = format_ident!("{name}Filter");
+        let partial_name = format_ident!("{name}Partial");
         let members = Member::from_struct_fields::<false>(name.clone(), data_struct.fields);
         // Add Partial types for Migration here!
         Self {
             name,
             table_name,
             filter_name,
+            partial_name,
             visibility,
             variants: None,
             members,
@@ -646,6 +657,7 @@ impl Base {
         let on_conflict = attribute_struct_data.on_conflict();
         let table_name = format_ident!("{name}Table");
         let filter_name = format_ident!("{name}Filter");
+        let partial_name = format_ident!("{name}Partial");
         let members = Member::from_enum_variants(&data_enum.variants);
         let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
         // Add Partial types for Migration here!
@@ -653,6 +665,7 @@ impl Base {
             name,
             table_name,
             filter_name,
+            partial_name,
             visibility,
             variants: Some(variants),
             members,
@@ -903,6 +916,7 @@ impl Base {
             name,
             table_name,
             filter_name,
+            partial_name,
             members,
             ..
         } = self;
@@ -921,7 +935,6 @@ impl Base {
             .filter(|m| !m.is_skipped)
             .map(|c| c.create_field_type())
             .collect();
-        let param_count = field_names_with_skips.len();
         let field_names_without_skips: Vec<_> =
             members.iter().map(|c| c.create_field_name()).collect();
         let columns: Vec<_> = members
@@ -935,7 +948,27 @@ impl Base {
             .map(|m| m.create_column_definition_in_macro())
             .collect();
         let create_prefixed_columns_macro = format_ident!("column_names_with_prefix_for_{name}");
+        let partial_field_definitions = members.iter().map(|m| m.create_partial_field_definition());
         quote! {
+            impl silo::HasPartialRepresentation for #name {
+                type Partial = #partial_name;
+            }
+
+            struct #partial_name {
+                #(#partial_field_definitions,)*
+            }
+
+            impl silo::PartialType<#name> for #partial_name {
+                fn transpose(self) -> Option<#name> {
+                    #(
+                        let #field_names_without_skips = self.#field_names_without_skips?;
+                    )*
+                    Some(#name {
+                        #(#field_names_without_skips,)*
+                    })
+                }
+            }
+
             impl silo::FromRow for #name {
                 fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
                     use silo::rusqlite::OptionalExtension;
