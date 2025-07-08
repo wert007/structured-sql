@@ -727,6 +727,14 @@ pub trait Filterable {
     fn must_be_equal(self) -> Self::Filtered;
 }
 
+impl<T: IntoGenericFilter> Filterable for T {
+    type Filtered = T;
+
+    fn must_be_equal(self) -> Self::Filtered {
+        self
+    }
+}
+
 impl<T: Filterable> Filterable for Option<T> {
     type Filtered = T::Filtered;
 
