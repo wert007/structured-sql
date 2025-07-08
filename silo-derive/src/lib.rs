@@ -695,76 +695,79 @@ impl Base {
             ..
         } = self;
         quote! {
-        #visibility struct #table_name<'a> {
-            connection: &'a silo::rusqlite::Connection,
-            string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>,
-        }
+            #visibility struct #table_name<'a> {
+                connection: &'a silo::rusqlite::Connection,
+                string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>,
+            }
 
 
-        impl<'a> silo::SqlTable<'a> for #table_name<'a> {
-            type RowType = #name;
+            impl<'a> silo::SqlTable<'a> for #table_name<'a> {
+                type RowType = #name;
 
-            const INSERT_FAILURE_BEHAVIOR: silo::SqlFailureBehavior = #on_conflict;
+                const INSERT_FAILURE_BEHAVIOR: silo::SqlFailureBehavior = #on_conflict;
 
 
-            fn insert(&self, row: Self::RowType) -> Result<(), silo::rusqlite::Error> {
-                use silo::AsParams;
-                let columns = Self::RowType::COLUMNS.into_iter().map(|c| c.name).fold(
-                    String::new(),
-                    |mut acc, cur| {
-                        if acc.is_empty() {
-                            format!("\"{cur}\"")
-                        } else {
-                            acc.push_str(", ");
-                            acc.push('"');
-                            acc.push_str(cur);
-                            acc.push('"');
-                            acc
-                        }
-                    },
-                );
-                let values = (0..Self::RowType::COLUMNS.len()).map(|v| v + 1).fold(
-                    String::new(),
-                    |mut acc, cur| {
-                        if acc.is_empty() {
-                            format!("?{cur}")
-                        } else {
-                            acc.push_str(", ?");
-                            acc.push_str(&cur.to_string());
-                            acc
-                        }
-                    },
-                );
-
-                let sql = format!(
-                        "INSERT OR {} INTO {} ({columns}) VALUES ({values})",
-                        Self::INSERT_FAILURE_BEHAVIOR.to_string(),
-                        Self::RowType::NAME,
+                fn insert(&self, row: Self::RowType) -> Result<(), silo::rusqlite::Error> {
+                    use silo::AsParams;
+                    let columns = Self::RowType::COLUMNS.into_iter().map(|c| c.name).fold(
+                        String::new(),
+                        |mut acc, cur| {
+                            if acc.is_empty() {
+                                format!("\"{cur}\"")
+                            } else {
+                                acc.push_str(", ");
+                                acc.push('"');
+                                acc.push_str(cur);
+                                acc.push('"');
+                                acc
+                            }
+                        },
                     );
-                self.connection.execute(
-                    &sql,
-                    row.as_params().as_slice(),
-                )?;
-                Ok(())
-            }
+                    let values = (0..Self::RowType::COLUMNS.len()).map(|v| v + 1).fold(
+                        String::new(),
+                        |mut acc, cur| {
+                            if acc.is_empty() {
+                                format!("?{cur}")
+                            } else {
+                                acc.push_str(", ?");
+                                acc.push_str(&cur.to_string());
+                                acc
+                            }
+                        },
+                    );
 
-            fn filter(&self, filter: #filter_name) -> Result<Vec<#name>, silo::rusqlite::Error> {
-                use silo::IntoGenericFilter;
-                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-                silo::query_table_filtered::<Self::RowType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic)
-            }
+                    let sql = format!(
+                            "INSERT OR {} INTO {} ({columns}) VALUES ({values})",
+                            Self::INSERT_FAILURE_BEHAVIOR.to_string(),
+                            Self::RowType::NAME,
+                        );
+                        #[cfg(feature = "debug_sql")]
+        dbg!(&sql);
 
-            fn delete(&self, filter: #filter_name) -> Result<usize, silo::rusqlite::Error> {
-                use silo::IntoGenericFilter;
-                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-                silo::delete_table_filtered::<Self::RowType>(&self.connection, generic)
-            }
+                    self.connection.execute(
+                        &sql,
+                        row.as_params().as_slice(),
+                    )?;
+                    Ok(())
+                }
 
-            fn from_connection(connection: &'a silo::rusqlite::Connection, string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>) -> Self {
-                Self { connection, string_storage }
+                fn filter(&self, filter: #filter_name) -> Result<Vec<#name>, silo::rusqlite::Error> {
+                    use silo::IntoGenericFilter;
+                    let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+                    silo::query_table_filtered::<Self::RowType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic)
+                }
+
+                fn delete(&self, filter: #filter_name) -> Result<usize, silo::rusqlite::Error> {
+                    use silo::IntoGenericFilter;
+                    let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+                    silo::delete_table_filtered::<Self::RowType>(&self.connection, generic)
+                }
+
+                fn from_connection(connection: &'a silo::rusqlite::Connection, string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>) -> Self {
+                    Self { connection, string_storage }
+                }
             }
-        }
-        }
+            }
     }
 
     fn create_filter(&self) -> proc_macro2::TokenStream {
@@ -1244,76 +1247,79 @@ impl BaseVec {
             ..
         } = self;
         quote! {
-        #visibility struct #table_name<'a> {
-            connection: &'a silo::rusqlite::Connection,
-            string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>,
-        }
+            #visibility struct #table_name<'a> {
+                connection: &'a silo::rusqlite::Connection,
+                string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>,
+            }
 
-        impl<'a> silo::SqlVecTable<'a> for #table_name<'a> {
-            const INSERT_FAILURE_BEHAVIOR: silo::SqlFailureBehavior = #on_conflict;
+            impl<'a> silo::SqlVecTable<'a> for #table_name<'a> {
+                const INSERT_FAILURE_BEHAVIOR: silo::SqlFailureBehavior = #on_conflict;
 
-            type GroupedRowType = #name;
+                type GroupedRowType = #name;
 
-            fn insert(&self, row: Self::GroupedRowType) -> Result<(), silo::rusqlite::Error> {
-                use silo::AsRepeatedParams;
-                let columns = Self::GroupedRowType::COLUMNS.into_iter().map(|c| c.name).fold(
-                    String::new(),
-                    |mut acc, cur| {
-                        if acc.is_empty() {
-                            format!("\"{cur}\"")
-                        } else {
-                            acc.push_str(", ");
-                            acc.push('"');
-                            acc.push_str(cur);
-                            acc.push('"');
-                            acc
-                        }
-                    },
-                );
-                let values = (0..Self::GroupedRowType::COLUMNS.len()).map(|v| v + 1).fold(
-                    String::new(),
-                    |mut acc, cur| {
-                        if acc.is_empty() {
-                            format!("?{cur}")
-                        } else {
-                            acc.push_str(", ?");
-                            acc.push_str(&cur.to_string());
-                            acc
-                        }
-                    },
-                );
-
-                let sql = format!(
-                        "INSERT OR {} INTO {} ({columns}) VALUES ({values})",
-                        Self::INSERT_FAILURE_BEHAVIOR.to_string(),
-                        Self::GroupedRowType::NAME,
+                fn insert(&self, row: Self::GroupedRowType) -> Result<(), silo::rusqlite::Error> {
+                    use silo::AsRepeatedParams;
+                    let columns = Self::GroupedRowType::COLUMNS.into_iter().map(|c| c.name).fold(
+                        String::new(),
+                        |mut acc, cur| {
+                            if acc.is_empty() {
+                                format!("\"{cur}\"")
+                            } else {
+                                acc.push_str(", ");
+                                acc.push('"');
+                                acc.push_str(cur);
+                                acc.push('"');
+                                acc
+                            }
+                        },
                     );
-                for entry in &row.as_params() {
-                    self.connection.execute(
-                        &sql,
-                        entry.as_slice(),
-                    )?;
+                    let values = (0..Self::GroupedRowType::COLUMNS.len()).map(|v| v + 1).fold(
+                        String::new(),
+                        |mut acc, cur| {
+                            if acc.is_empty() {
+                                format!("?{cur}")
+                            } else {
+                                acc.push_str(", ?");
+                                acc.push_str(&cur.to_string());
+                                acc
+                            }
+                        },
+                    );
+
+                    let sql = format!(
+                            "INSERT OR {} INTO {} ({columns}) VALUES ({values})",
+                            Self::INSERT_FAILURE_BEHAVIOR.to_string(),
+                            Self::GroupedRowType::NAME,
+                        );
+                        #[cfg(feature = "debug_sql")]
+        dbg!(&sql);
+
+                    for entry in &row.as_params() {
+                        self.connection.execute(
+                            &sql,
+                            entry.as_slice(),
+                        )?;
+                    }
+                    Ok(())
                 }
-                Ok(())
-            }
 
-            fn filter(&self, filter: #filter_name) -> Result<Vec<#name>, silo::rusqlite::Error> {
-                use silo::IntoGenericFilter;
-                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-                silo::query_vec_table_filtered::<Self::GroupedRowType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic)
-            }
+                fn filter(&self, filter: #filter_name) -> Result<Vec<#name>, silo::rusqlite::Error> {
+                    use silo::IntoGenericFilter;
+                    let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+                    silo::query_vec_table_filtered::<Self::GroupedRowType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic)
+                }
 
-            fn delete(&self, filter: #filter_name) -> Result<usize, silo::rusqlite::Error> {
-                use silo::IntoGenericFilter;
-                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-                silo::delete_vec_table_filtered::<Self::GroupedRowType>(&self.connection, generic)
-            }
+                fn delete(&self, filter: #filter_name) -> Result<usize, silo::rusqlite::Error> {
+                    use silo::IntoGenericFilter;
+                    let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+                    silo::delete_vec_table_filtered::<Self::GroupedRowType>(&self.connection, generic)
+                }
 
-            fn from_connection(connection: &'a silo::rusqlite::Connection, string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>) -> Self {
-                Self { connection, string_storage }
+                fn from_connection(connection: &'a silo::rusqlite::Connection, string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>) -> Self {
+                    Self { connection, string_storage }
+                }
             }
-        }
-        }
+            }
     }
 
     fn create_filter(&self) -> proc_macro2::TokenStream {

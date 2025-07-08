@@ -304,6 +304,9 @@ impl Database {
             }
         }
         sql.push_str(");");
+        #[cfg(feature = "debug_sql")]
+        dbg!(&sql);
+
         self.connection.execute(&sql, ())?;
         Ok(())
     }
@@ -326,6 +329,9 @@ impl Database {
             }
         }
         sql.push_str(");");
+        #[cfg(feature = "debug_sql")]
+        dbg!(&sql);
+
         self.connection.execute(&sql, ())?;
         Ok(())
     }
@@ -969,6 +975,8 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a>>(
     let mut sql = format!("SELECT {columns} from {}", T::NAME);
     sql.push(' ');
     sql.push_str(&filter.to_sql());
+    #[cfg(feature = "debug_sql")]
+    dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
     Ok(statement
         .query_map(filter.get_params(), |row| {
@@ -997,6 +1005,8 @@ pub fn query_vec_table_filtered<'a, T: IntoSqlVecTable<'a>>(
     let mut sql = format!("SELECT {columns} from {}", T::NAME);
     sql.push(' ');
     sql.push_str(&filter.to_sql());
+    #[cfg(feature = "debug_sql")]
+    dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
     let result: Result<Vec<_>, _> = statement
         .query_map(filter.get_params(), |r| {
@@ -1026,6 +1036,8 @@ pub fn delete_table_filtered<'a, T: IntoSqlTable<'a>>(
     let mut sql = format!("DELETE FROM {}", T::NAME);
     sql.push(' ');
     sql.push_str(&filter.to_sql());
+    #[cfg(feature = "debug_sql")]
+    dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
     Ok(statement.execute(filter.get_params())?)
 }
@@ -1037,6 +1049,9 @@ pub fn delete_vec_table_filtered<'a, T: IntoSqlVecTable<'a>>(
     let mut sql = format!("DELETE FROM {}", T::NAME);
     sql.push(' ');
     sql.push_str(&filter.to_sql());
+    #[cfg(feature = "debug_sql")]
+    dbg!(&sql);
+
     let mut statement = connection.prepare(&sql)?;
     Ok(statement.execute(filter.get_params())?)
 }
