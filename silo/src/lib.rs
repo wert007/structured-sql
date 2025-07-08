@@ -549,7 +549,7 @@ impl<T: FromRow> FromRow for Option<T> {
     ) -> Option<Self> {
         match T::try_from_row(string_storage, column_name, row) {
             Some(it) => Some(Some(it)),
-            None => None,
+            None => Some(None),
         }
     }
 }
