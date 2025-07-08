@@ -1016,8 +1016,12 @@ pub fn query_vec_table_filtered<'a, T: IntoSqlVecTable<'a>>(
     let mut statement = connection.prepare(&sql)?;
     let result: Result<Vec<_>, _> = statement
         .query_map(filter.get_params(), |r| {
-            let result =
-                <T as FromGroupedRows>::RowType::try_from_row(string_storage, None, r).unwrap();
+            let result = <T as FromGroupedRows>::RowType::try_from_row(string_storage, None, r)
+                .unwrap_or_else(|| {
+                    #[cfg(feature = "debug_sql")]
+                    dbg!(r);
+                    panic!("Failed constructing value from row")
+                });
 
             Ok((result.primary(), result))
         })?
@@ -1031,11 +1035,8 @@ pub fn query_vec_table_filtered<'a, T: IntoSqlVecTable<'a>>(
     let result = result
         .into_iter()
         .map(|(_p, v)| {
-            <T as FromGroupedRows>::try_from_rows(string_storage, None, v).unwrap_or_else(|| {
-                #[cfg(feature = "debug_sql")]
-                dbg!(row);
-                panic!("Failed constructing value from row")
-            })
+            <T as FromGroupedRows>::try_from_rows(string_storage, None, v)
+                .unwrap_or_else(|| panic!("Failed constructing value from row"))
         })
         .collect();
     Ok(result)
