@@ -274,6 +274,17 @@ impl Member {
         }
     }
 
+    fn create_contains_filter_field(&self) -> proc_macro2::TokenStream {
+        let Member { name, type_, .. } = self;
+        let name = format_ident!("{name}_contains");
+        if Member::as_simple_type(type_, false, self.supports_vec).is_some() {
+            let type_ = Member::try_strip_auxiliary(self.supports_vec, type_);
+            quote! { #name(mut self, expected: #type_) -> Self}
+        } else {
+            quote! { #name(mut self, expected: <#type_ as silo::Filterable>::Filtered) -> Self}
+        }
+    }
+
     fn create_field_name(&self) -> proc_macro2::TokenStream {
         let Member { name, .. } = self;
         quote! { #name }
@@ -806,6 +817,11 @@ impl Base {
             .filter(|m| !m.is_skipped)
             .map(|m| m.create_has_filter_field())
             .collect();
+        let contains_filter_fields: Vec<_> = members
+            .iter()
+            .filter(|m| !m.is_skipped)
+            .map(|m| m.create_contains_filter_field())
+            .collect();
 
         quote! {
             #[derive(Default, Clone, Debug)]
@@ -820,6 +836,12 @@ impl Base {
                         self.#filter_field_names = expected.must_be_equal();
                         self
                     }
+
+                    #visibility fn #contains_filter_fields {
+                        use silo::Filterable;
+                        self.#filter_field_names = expected.must_contain();
+                        self
+                    }
                 )*
             }
 
@@ -829,6 +851,11 @@ impl Base {
                 fn must_be_equal(self) -> Self::Filtered {
                     let mut result = #filter_name::default();
                     #(result.#filter_field_names = self.#filter_field_names.must_be_equal();)*
+                    result
+                }
+                fn must_contain(self) -> Self::Filtered {
+                    let mut result = #filter_name::default();
+                    #(result.#filter_field_names = self.#filter_field_names.must_contain();)*
                     result
                 }
             }
@@ -887,6 +914,12 @@ impl Base {
                 fn must_be_equal(self) -> Self::Filtered {
                     let mut result = #filter_name::default();
                     result.variant = self.variant_name().to_string().must_be_equal();
+                    result
+                }
+
+                fn must_contain(self) -> Self::Filtered {
+                    let mut result = #filter_name::default();
+                    result.variant = self.variant_name().to_string().must_contain();
                     result
                 }
             }
@@ -1375,6 +1408,12 @@ impl BaseVec {
                 fn must_be_equal(self) -> Self::Filtered {
                     let mut result = #filter_name::default();
                     #(result.#filter_field_names = self.#filter_field_names.must_be_equal();)*
+                    result
+                }
+
+                fn must_contain(self) -> Self::Filtered {
+                    let mut result = #filter_name::default();
+                    #(result.#filter_field_names = self.#filter_field_names.must_contain();)*
                     result
                 }
             }

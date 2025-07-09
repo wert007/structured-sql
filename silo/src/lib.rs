@@ -407,6 +407,10 @@ macro_rules! impl_as_params {
             fn must_be_equal(self) -> Self::Filtered {
                 SqlColumnFilter::MustBeEqual(self)
             }
+
+            fn must_contain(self) -> Self::Filtered {
+                SqlColumnFilter::Contains(self)
+            }
         }
 
         impl AsParams for $t {
@@ -680,6 +684,7 @@ pub enum SqlColumnFilter<T: Clone + std::fmt::Debug> {
     #[default]
     Ignored,
     MustBeEqual(T),
+    Contains(T),
 }
 
 impl<T: Into<SqlValue> + Clone + std::fmt::Debug> SqlColumnFilter<T> {
@@ -687,6 +692,7 @@ impl<T: Into<SqlValue> + Clone + std::fmt::Debug> SqlColumnFilter<T> {
         match self {
             SqlColumnFilter::Ignored => SqlColumnFilter::Ignored,
             SqlColumnFilter::MustBeEqual(it) => SqlColumnFilter::MustBeEqual(it.into()),
+            SqlColumnFilter::Contains(it) => SqlColumnFilter::Contains(it.into()),
         }
     }
 }
@@ -696,6 +702,18 @@ impl SqlColumnFilter<SqlValue> {
         match self {
             SqlColumnFilter::Ignored => unreachable!(),
             SqlColumnFilter::MustBeEqual(v) => format!(" = {}", v.to_sql()),
+            SqlColumnFilter::Contains(v) => {
+                let string_representation = v.to_sql();
+                if string_representation.starts_with('"') && string_representation.ends_with('"') {
+                    format!(
+                        " LIKE \"%{}%\"",
+                        &string_representation[1..string_representation.len() - 2]
+                    )
+                } else {
+                    // Fallback to must be equal
+                    format!(" = {}", v.to_sql())
+                }
+            }
         }
     }
 }
@@ -717,6 +735,8 @@ impl<T: IntoSqlColumnFilter + Clone + Debug> IntoSqlColumnFilter for SqlColumnFi
         match self {
             SqlColumnFilter::Ignored => vec![],
             SqlColumnFilter::MustBeEqual(t) => t.into_sql_column_filter(name, string_storage),
+            // TODO: This should probably more behave like (does any column of this type have tis value)
+            SqlColumnFilter::Contains(t) => t.into_sql_column_filter(name, string_storage),
         }
     }
 }
@@ -725,12 +745,16 @@ pub trait Filterable {
     type Filtered: IntoGenericFilter;
 
     fn must_be_equal(self) -> Self::Filtered;
+    fn must_contain(self) -> Self::Filtered;
 }
 
 impl<T: IntoGenericFilter> Filterable for T {
     type Filtered = T;
 
     fn must_be_equal(self) -> Self::Filtered {
+        self
+    }
+    fn must_contain(self) -> Self::Filtered {
         self
     }
 }
@@ -741,6 +765,10 @@ impl<T: Filterable> Filterable for Option<T> {
     fn must_be_equal(self) -> Self::Filtered {
         self.unwrap().must_be_equal()
     }
+
+    fn must_contain(self) -> Self::Filtered {
+        self.unwrap().must_contain()
+    }
 }
 
 impl<T: Filterable> Filterable for Vec<T> {
@@ -748,6 +776,10 @@ impl<T: Filterable> Filterable for Vec<T> {
 
     fn must_be_equal(self) -> Self::Filtered {
         // self.unwrap().must_be_equal()
+        todo!()
+    }
+
+    fn must_contain(self) -> Self::Filtered {
         todo!()
     }
 }
