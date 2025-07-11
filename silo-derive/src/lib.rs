@@ -881,8 +881,8 @@ impl Base {
                     use silo::IntoSqlColumnFilter;
                     let mut result = Vec::new();
                     #(
-                        let name = string_storage.store(&[name, "_", stringify!(#filter_field_names)]);
-                        result.extend(self.#filter_field_names.into_sql_column_filter(name, string_storage));
+                        let column_name = string_storage.store(&[name, "_", stringify!(#filter_field_names)]);
+                        result.extend(self.#filter_field_names.into_sql_column_filter(column_name, string_storage));
                     )*
                     result
                 }
@@ -945,8 +945,8 @@ impl Base {
                 ) -> Vec<(&'static str, silo::SqlColumnFilter<silo::SqlValue>)> {
                     use silo::IntoSqlColumnFilter;
                     let mut result = Vec::new();
-                    let name = string_storage.store(&[name, "_", "variant"]);
-                    result.extend(self.variant.into_sql_column_filter(name, string_storage));
+                    let column_name = string_storage.store(&[name, "_", "variant"]);
+                    result.extend(self.variant.into_sql_column_filter(column_name, string_storage));
                     result
                 }
             }
