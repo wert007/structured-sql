@@ -1439,8 +1439,8 @@ impl BaseVec {
                     use silo::IntoSqlColumnFilter;
                     let mut result = Vec::new();
                     #(
-                        let name = string_storage.store(&[name, "_", stringify!(#filter_field_names)]);
-                        result.extend(self.#filter_field_names.into_sql_column_filter(name, string_storage));
+                        let column_name = string_storage.store(&[name, "_", stringify!(#filter_field_names)]);
+                        result.extend(self.#filter_field_names.into_sql_column_filter(column_name, string_storage));
                     )*
                     result
                 }
