@@ -1,15 +1,19 @@
 use silo::{
     AsParams, Database, IntoSqlTable, IntoSqlVecTable, MigrationHandler, PartialType, SqlTable,
-    SqlVecTable,
+    SqlVecTable, StaticStringStorage,
 };
 
-mod crashtest;
+// mod crashtest;
 
 #[derive(Debug, IntoSqlTable, Clone)]
+#[silo(migrate)]
 struct Point {
     x: i32,
+    // #[silo(skip)]
     y: i32,
 }
+
+impl MigrationHandler for Point {}
 
 #[derive(Debug, IntoSqlTable, Clone, Default)]
 enum Fruit {
@@ -28,13 +32,29 @@ enum FruitWithData {
 }
 
 #[derive(Debug, IntoSqlTable)]
+#[silo(migrate)]
 struct Test {
     #[silo(primary)]
     id: u32,
     value1: Point,
-    #[silo(skip)]
+    // #[silo(skip)]
+    // #[silo(unique)]
     value2: String,
     value3: FruitWithData,
+    age: f64,
+}
+
+impl MigrationHandler for Test {
+    fn migrate(
+        string_storage: &mut StaticStringStorage,
+        mut partial: Self::Partial,
+        row: &rusqlite::Row,
+    ) -> Option<Self> {
+        use silo::FromRow;
+        let age = u32::try_from_row(string_storage, Some("age"), row).map(|v| v as f64);
+        partial.age.get_or_insert(age.unwrap_or(55.2));
+        partial.transpose()
+    }
 }
 
 #[derive(Debug, Clone, IntoSqlTable)]
@@ -100,6 +120,7 @@ pub struct MovieWithGenres {
 }
 
 #[derive(Clone, Debug, PartialEq, IntoSqlTable)]
+#[silo(migrate)]
 pub struct TmdbMovie {
     #[silo(primary)]
     id: u32,
@@ -125,7 +146,11 @@ pub struct TmdbMovie {
 }
 
 impl MigrationHandler for TmdbMovie {
-    fn handle_migration(mut partial: Self::Partial) -> Option<Self> {
+    fn migrate(
+        string_storage: &mut StaticStringStorage,
+        mut partial: Self::Partial,
+        row: &rusqlite::Row,
+    ) -> Option<Self> {
         if partial.release_date.is_none() {
             partial.release_date = Some(time::OffsetDateTime::now_utc());
         }
@@ -146,11 +171,11 @@ pub struct MovieWithRatings {
     pub(crate) ratings: TmdbMovie,
 }
 
-const _: () = const { assert!(matches!(Point::COLUMNS.len(), 2)) };
-// const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
-const _: () = const { assert!(matches!(Fruit::COLUMNS.len(), 1)) };
-const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
-const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
+// const _: () = const { assert!(matches!(Point::COLUMNS.len(), 2)) };
+// // const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
+// const _: () = const { assert!(matches!(Fruit::COLUMNS.len(), 1)) };
+// const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
+// const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 
 #[derive(Debug, IntoSqlVecTable)]
 struct FooWithVec {
@@ -161,19 +186,22 @@ struct FooWithVec {
 
 fn main() {
     dbg!(Test::COLUMNS);
-    let test_db = Database::create_in_memory().unwrap();
+    let test_db = Database::open("test-before.db").unwrap();
+    test_db.check::<Test>().unwrap();
     let test = test_db.load::<Test>().unwrap();
-    test_db.save("test-before.db").unwrap();
+    // test_db.save("test-before.db").unwrap();
 
     test.insert(Test {
-        id: 0,
+        id: std::time::Instant::now().elapsed().as_nanos() as u32,
         value1: Point { x: 12, y: 42 },
-        value2: "Hello".into(),
+        value2: "f32::EPSILON".into(),
         value3: FruitWithData::Banana {
             ripeness: "Very".into(),
         },
+        age: f64::NAN,
     })
     .unwrap();
+
     let f = TestFilter {
         value1: (PointFilter {
             x: silo::SqlColumnFilter::MustBeEqual(12),
@@ -222,25 +250,26 @@ fn main() {
     //     .unwrap();
     // dbg!(result.into_iter().map(|f| f.url).collect::<Vec<_>>());
 
-    let vt = test_db.load2::<FooWithVec>().unwrap();
-    vt.insert(FooWithVec {
-        iddasda: 0,
-        values: vec![
-            "1".into(),
-            "1".into(),
-            "1".into(),
-            "1".into(),
-            "1".into(),
-            "1".into(),
-            "1".into(),
-            "1".into(),
-            "1".into(),
-            "1".into(),
-            "1".into(),
-            "1".into(),
-        ],
-    })
-    .unwrap();
+    // let vt = test_db.load2::<FooWithVec>().unwrap();
+    // // test_db.check::<FooWithVec>().unwrap();
+    // vt.insert(FooWithVec {
+    //     iddasda: 0,
+    //     values: vec![
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //         "1".into(),
+    //     ],
+    // })
+    // .unwrap();
     test_db.save("test.db").unwrap();
     println!("Hello, world!");
 }

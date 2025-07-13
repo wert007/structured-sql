@@ -35,6 +35,7 @@ struct AttributeStructData {
     on_conflict_fail: bool,
     on_conflict_ignore: bool,
     on_conflict_replace: bool,
+    has_custom_migration_handler: bool,
 }
 
 impl AttributeStructData {
@@ -54,6 +55,7 @@ impl AttributeStructData {
                     "fail" => this.on_conflict_fail = true,
                     "ignore" => this.on_conflict_ignore = true,
                     "replace" => this.on_conflict_replace = true,
+                    "migrate" => this.has_custom_migration_handler = true,
                     _ => {
                         panic!("Invalid attribute");
                     }
@@ -635,6 +637,7 @@ struct Base {
     variants: Option<Vec<Ident>>,
     members: Vec<Member>,
     on_conflict: proc_macro2::TokenStream,
+    migration_handler: proc_macro2::TokenStream,
 }
 
 impl std::fmt::Debug for Base {
@@ -661,6 +664,12 @@ impl Base {
         let filter_name = format_ident!("{name}Filter");
         let partial_name = format_ident!("{name}Partial");
         let members = Member::from_struct_fields::<false>(name.clone(), data_struct.fields);
+        let migration_handler = if attribute_struct_data.has_custom_migration_handler {
+            proc_macro2::TokenStream::new()
+        } else {
+            quote! { impl silo::MigrationHandler for #name {}
+            }
+        };
         // Add Partial types for Migration here!
         Self {
             name,
@@ -671,6 +680,7 @@ impl Base {
             variants: None,
             members,
             on_conflict,
+            migration_handler,
         }
     }
 
@@ -688,6 +698,12 @@ impl Base {
         let members = Member::from_enum_variants(&data_enum.variants);
         let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
         // Add Partial types for Migration here!
+        let migration_handler = if attribute_struct_data.has_custom_migration_handler {
+            proc_macro2::TokenStream::new()
+        } else {
+            quote! { impl silo::MigrationHandler for #name {}
+            }
+        };
         Self {
             name,
             table_name,
@@ -697,6 +713,7 @@ impl Base {
             variants: Some(variants),
             members,
             on_conflict,
+            migration_handler,
         }
     }
 
@@ -774,6 +791,19 @@ impl Base {
                 use silo::IntoGenericFilter;
                 let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
                 silo::delete_table_filtered::<Self::RowType>(&self.connection, generic)
+            }
+
+
+            fn update(&self, row: Self::RowType) -> Result<(), silo::rusqlite::Error> {
+                Err(silo::rusqlite::Error::InvalidQuery)
+            }
+
+            fn migrate(&self, actual_columns: &[silo::SqlColumn]) -> Result<(), silo::rusqlite::Error> {
+                silo::handle_migration::<Self::RowType>(
+                    self.connection,
+                    &mut self.string_storage.lock().unwrap(),
+                    actual_columns,
+                )
             }
 
             fn from_connection(connection: &'a silo::rusqlite::Connection, string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>) -> Self {
@@ -969,6 +999,7 @@ impl Base {
             partial_name,
             members,
             visibility,
+            migration_handler,
             ..
         } = self;
         let field_names_with_skips: Vec<_> = members
@@ -1020,6 +1051,19 @@ impl Base {
                 }
             }
 
+            impl silo::FromRow for #partial_name {
+                fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
+                    use silo::rusqlite::OptionalExtension;
+                    #(
+                        let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
+                        let #field_names_with_skips = <#field_types_with_skips>::try_from_row(string_storage, Some(actual_column_name), row);)*
+                    #(let #skipped_field_names = None;)*
+                    Some(Self {#( #field_names_without_skips),*})
+                }
+            }
+
+
+
             impl silo::FromRow for #name {
                 fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
                     use silo::rusqlite::OptionalExtension;
@@ -1052,6 +1096,8 @@ impl Base {
                 const NAME: &'static str = stringify!(#table_name);
             }
 
+            #migration_handler
+
             #[allow(unused_macros)]
             macro_rules! #create_prefixed_columns_macro {
                 ($prefix:expr) => {
@@ -1069,6 +1115,8 @@ impl Base {
             table_name,
             filter_name,
             members,
+            visibility,
+            migration_handler,
             ..
         } = self;
         let field_names_with_skips: Vec<_> =
@@ -1095,8 +1143,35 @@ impl Base {
             .map(|m| m.create_column_definition_in_macro())
             .collect();
         let create_prefixed_columns_macro = format_ident!("column_names_with_prefix_for_{name}");
+        let partial_name = format_ident!("Partial{name}");
 
         quote! {
+            impl silo::HasPartialRepresentation for #name {
+                type Partial = #partial_name;
+            }
+
+            #visibility struct #partial_name {
+                variant: Option<String>,
+            }
+
+            impl silo::PartialType<#name> for #partial_name {
+                fn transpose(self) -> Option<#name> {
+                    // TODO: Real support for partial enum values!
+                    None
+                }
+            }
+
+            impl silo::FromRow for #partial_name {
+                fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
+                    use silo::rusqlite::OptionalExtension;
+                    let variant = String::try_from_row(string_storage, Some("variant"), row);
+                    Some(Self {
+                        variant,
+                    })
+                }
+            }
+
+
             impl silo::FromRow for #name {
                 fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
                     use silo::rusqlite::OptionalExtension;
@@ -1169,6 +1244,8 @@ impl Base {
 
                 const NAME: &'static str = stringify!(#table_name);
             }
+
+            #migration_handler
 
             #[allow(unused_macros)]
             macro_rules! #create_prefixed_columns_macro {
