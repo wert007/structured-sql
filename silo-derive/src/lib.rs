@@ -662,7 +662,7 @@ impl Base {
         let on_conflict = attribute_struct_data.on_conflict();
         let table_name = format_ident!("{name}Table");
         let filter_name = format_ident!("{name}Filter");
-        let partial_name = format_ident!("{name}Partial");
+        let partial_name = format_ident!("Partial{name}");
         let members = Member::from_struct_fields::<false>(name.clone(), data_struct.fields);
         let migration_handler = if attribute_struct_data.has_custom_migration_handler {
             proc_macro2::TokenStream::new()
@@ -694,7 +694,7 @@ impl Base {
         let on_conflict = attribute_struct_data.on_conflict();
         let table_name = format_ident!("{name}Table");
         let filter_name = format_ident!("{name}Filter");
-        let partial_name = format_ident!("{name}Partial");
+        let partial_name = format_ident!("Partial{name}");
         let members = Member::from_enum_variants(&data_enum.variants);
         let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
         // Add Partial types for Migration here!
@@ -722,6 +722,7 @@ impl Base {
             name,
             table_name,
             filter_name,
+            partial_name,
             visibility,
             on_conflict,
             ..
@@ -794,8 +795,11 @@ impl Base {
             }
 
 
-            fn update(&self, row: Self::RowType) -> Result<(), silo::rusqlite::Error> {
-                Err(silo::rusqlite::Error::InvalidQuery)
+            fn update(&self, filter: #filter_name, updated: #partial_name) -> Result<(), silo::rusqlite::Error> {
+                use silo::IntoGenericFilter;
+                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+                silo::update_rows::<Self::RowType>(&self.connection, generic, updated)?;
+                Ok(())
             }
 
             fn migrate(&self, actual_columns: &[silo::SqlColumn]) -> Result<(), silo::rusqlite::Error> {
@@ -878,12 +882,12 @@ impl Base {
             impl silo::Filterable for #name {
                 type Filtered = #filter_name;
 
-                fn must_be_equal(self) -> Self::Filtered {
+                fn must_be_equal(&self) -> Self::Filtered {
                     let mut result = #filter_name::default();
                     #(result.#filter_field_names = self.#filter_field_names.must_be_equal();)*
                     result
                 }
-                fn must_contain(self) -> Self::Filtered {
+                fn must_contain(&self) -> Self::Filtered {
                     let mut result = #filter_name::default();
                     #(result.#filter_field_names = self.#filter_field_names.must_contain();)*
                     result
@@ -941,13 +945,13 @@ impl Base {
             impl silo::Filterable for #name {
                 type Filtered = #filter_name;
 
-                fn must_be_equal(self) -> Self::Filtered {
+                fn must_be_equal(&self) -> Self::Filtered {
                     let mut result = #filter_name::default();
                     result.variant = self.variant_name().to_string().must_be_equal();
                     result
                 }
 
-                fn must_contain(self) -> Self::Filtered {
+                fn must_contain(&self) -> Self::Filtered {
                     let mut result = #filter_name::default();
                     result.variant = self.variant_name().to_string().must_contain();
                     result
@@ -1087,7 +1091,6 @@ impl Base {
             }
 
             impl<'a> silo::IntoSqlTable<'a> for #name {
-                type Filter = #filter_name;
                 type Table = #table_name<'a>;
                 const COLUMNS: &'static [silo::SqlColumn] = &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
                     #(#columns,)*
@@ -1117,6 +1120,7 @@ impl Base {
             members,
             visibility,
             migration_handler,
+            partial_name,
             ..
         } = self;
         let field_names_with_skips: Vec<_> =
@@ -1143,7 +1147,6 @@ impl Base {
             .map(|m| m.create_column_definition_in_macro())
             .collect();
         let create_prefixed_columns_macro = format_ident!("column_names_with_prefix_for_{name}");
-        let partial_name = format_ident!("Partial{name}");
 
         quote! {
             impl silo::HasPartialRepresentation for #name {
@@ -1230,7 +1233,6 @@ impl Base {
             }
 
             impl<'a> silo::IntoSqlTable<'a> for #name {
-                type Filter = #filter_name;
                 type Table = #table_name<'a>;
                 const COLUMNS: &'static [silo::SqlColumn] = &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
                     &[silo::SqlColumn {

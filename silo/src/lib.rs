@@ -38,9 +38,9 @@ mod test {
     use rusqlite::{Connection, OptionalExtension};
 
     use crate::{
-        AsParams, Database, FromRow, GenericFilter, HasPartialRepresentation, IntoGenericFilter,
-        IntoSqlTable, MigrationHandler, PartialType, SqlColumn, SqlColumnFilter, SqlColumnType,
-        SqlTable, StaticStringStorage, handle_migration,
+        AsParams, Database, Filterable, FromRow, GenericFilter, HasPartialRepresentation,
+        IntoGenericFilter, IntoSqlTable, MigrationHandler, PartialType, SqlColumn, SqlColumnFilter,
+        SqlColumnType, SqlTable, StaticStringStorage, handle_migration,
     };
 
     #[derive(Debug, PartialEq)]
@@ -135,8 +135,23 @@ mod test {
         type Partial = PartialCoord;
     }
 
+    impl Filterable for Coord {
+        type Filtered = CoordFilter;
+
+        fn must_be_equal(&self) -> Self::Filtered {
+            CoordFilter::default()
+                .x_should_be(self.x)
+                .y_should_be(self.y)
+        }
+
+        fn must_contain(&self) -> Self::Filtered {
+            CoordFilter::default()
+                .x_should_be(self.x)
+                .y_should_be(self.y)
+        }
+    }
+
     impl<'a> IntoSqlTable<'a> for Coord {
-        type Filter = CoordFilter;
         type Table = CoordTable<'a>;
         const COLUMNS: &'static [crate::SqlColumn] = &[
             SqlColumn {
@@ -227,7 +242,11 @@ mod test {
         const INSERT_FAILURE_BEHAVIOR: crate::SqlFailureBehavior =
             crate::SqlFailureBehavior::Ignore;
 
-        fn update(&self, row: Self::RowType) -> Result<(), rusqlite::Error> {
+        fn update(
+            &self,
+            filter: CoordFilter,
+            updated: PartialCoord,
+        ) -> Result<(), rusqlite::Error> {
             Err(rusqlite::Error::InvalidQuery)
         }
 
@@ -690,12 +709,12 @@ macro_rules! impl_as_params {
         impl Filterable for $t {
             type Filtered = SqlColumnFilter<$t>;
 
-            fn must_be_equal(self) -> Self::Filtered {
-                SqlColumnFilter::MustBeEqual(self)
+            fn must_be_equal(&self) -> Self::Filtered {
+                SqlColumnFilter::MustBeEqual(self.clone())
             }
 
-            fn must_contain(self) -> Self::Filtered {
-                SqlColumnFilter::Contains(self)
+            fn must_contain(&self) -> Self::Filtered {
+                SqlColumnFilter::Contains(self.clone())
             }
         }
 
@@ -751,12 +770,12 @@ macro_rules! impl_as_params_and_nan_is_none {
         impl Filterable for $t {
             type Filtered = SqlColumnFilter<$t>;
 
-            fn must_be_equal(self) -> Self::Filtered {
-                SqlColumnFilter::MustBeEqual(self)
+            fn must_be_equal(&self) -> Self::Filtered {
+                SqlColumnFilter::MustBeEqual(self.clone())
             }
 
-            fn must_contain(self) -> Self::Filtered {
-                SqlColumnFilter::Contains(self)
+            fn must_contain(&self) -> Self::Filtered {
+                SqlColumnFilter::Contains(self.clone())
             }
         }
 
@@ -935,11 +954,10 @@ impl<T: FromRow> FromGroupedRows for Vec<T> {
     type RowType = T;
 }
 
-pub trait IntoSqlTable<'a>: FromRow + AsParams + HasPartialRepresentation {
+pub trait IntoSqlTable<'a>: FromRow + AsParams + HasPartialRepresentation + Filterable {
     const COLUMNS: &'static [SqlColumn];
     const NAME: &'static str;
     type Table: SqlTable<'a>;
-    type Filter: IntoGenericFilter;
 }
 
 impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T> {
@@ -948,8 +966,6 @@ impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T> {
     const NAME: &'static str = T::NAME;
 
     type Table = T::Table;
-
-    type Filter = T::Filter;
 }
 
 pub trait IntoSqlVecTable<'a>:
@@ -1002,22 +1018,43 @@ pub trait SqlTable<'a> {
     ) -> Self;
     fn filter(
         &self,
-        filter: <Self::RowType as IntoSqlTable<'a>>::Filter,
+        filter: <Self::RowType as Filterable>::Filtered,
     ) -> Result<Vec<Self::RowType>, rusqlite::Error>;
     fn delete(
         &self,
-        filter: <Self::RowType as IntoSqlTable<'a>>::Filter,
+        filter: <Self::RowType as Filterable>::Filtered,
     ) -> Result<usize, rusqlite::Error>;
 
     fn insert(&self, row: Self::RowType) -> Result<(), rusqlite::Error>;
-    fn update(&self, row: Self::RowType) -> Result<(), rusqlite::Error>;
+    fn update(
+        &self,
+        filter: <Self::RowType as Filterable>::Filtered,
+        updated: <Self::RowType as HasPartialRepresentation>::Partial,
+    ) -> Result<(), rusqlite::Error>;
     fn count(
         &self,
-        filter: <Self::RowType as IntoSqlTable<'a>>::Filter,
+        filter: <Self::RowType as Filterable>::Filtered,
     ) -> Result<usize, rusqlite::Error> {
         Ok(self.filter(filter)?.len())
     }
     fn migrate(&self, actual_columns: &[SqlColumn]) -> Result<(), rusqlite::Error>;
+    fn drain(
+        &self,
+        callback: impl Fn(&Self::RowType) -> bool,
+    ) -> Result<Vec<Self::RowType>, rusqlite::Error> {
+        Ok(self
+            .filter(Default::default())?
+            .into_iter()
+            .filter_map(|r| {
+                if (callback)(&r) {
+                    self.delete(r.must_be_equal()).ok()?;
+                    Some(r)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>())
+    }
 }
 
 pub trait FromRowWithPrimary: FromRow {
@@ -1106,44 +1143,44 @@ impl<T: IntoSqlColumnFilter + Clone + Debug> IntoSqlColumnFilter for SqlColumnFi
 }
 
 pub trait Filterable {
-    type Filtered: IntoGenericFilter;
+    type Filtered: IntoGenericFilter + Default;
 
-    fn must_be_equal(self) -> Self::Filtered;
-    fn must_contain(self) -> Self::Filtered;
+    fn must_be_equal(&self) -> Self::Filtered;
+    fn must_contain(&self) -> Self::Filtered;
 }
 
-impl<T: IntoGenericFilter> Filterable for T {
+impl<T: IntoGenericFilter + Default + Clone> Filterable for T {
     type Filtered = T;
 
-    fn must_be_equal(self) -> Self::Filtered {
-        self
+    fn must_be_equal(&self) -> Self::Filtered {
+        self.clone()
     }
-    fn must_contain(self) -> Self::Filtered {
-        self
+    fn must_contain(&self) -> Self::Filtered {
+        self.clone()
     }
 }
 
 impl<T: Filterable> Filterable for Option<T> {
     type Filtered = T::Filtered;
 
-    fn must_be_equal(self) -> Self::Filtered {
-        self.unwrap().must_be_equal()
+    fn must_be_equal(&self) -> Self::Filtered {
+        self.as_ref().unwrap().must_be_equal()
     }
 
-    fn must_contain(self) -> Self::Filtered {
-        self.unwrap().must_contain()
+    fn must_contain(&self) -> Self::Filtered {
+        self.as_ref().unwrap().must_contain()
     }
 }
 
 impl<T: Filterable> Filterable for Vec<T> {
     type Filtered = T::Filtered;
 
-    fn must_be_equal(self) -> Self::Filtered {
+    fn must_be_equal(&self) -> Self::Filtered {
         // self.unwrap().must_be_equal()
         todo!()
     }
 
-    fn must_contain(self) -> Self::Filtered {
+    fn must_contain(&self) -> Self::Filtered {
         todo!()
     }
 }
@@ -1357,6 +1394,32 @@ impl Convert<f64> for SqlColumnType {
     fn convert() -> SqlColumnType {
         SqlColumnType::Float
     }
+}
+
+pub fn update_rows<'a, T: IntoSqlTable<'a>>(
+    connection: &&'a rusqlite::Connection,
+    filter: GenericFilter,
+    value: T::Partial,
+) -> Result<(), rusqlite::Error> {
+    let columns = T::COLUMNS
+        .into_iter()
+        .map(|c| c.name)
+        .fold(String::new(), |mut acc, cur| {
+            if acc.is_empty() {
+                cur.into()
+            } else {
+                acc.push_str(", ");
+                acc.push_str(cur);
+                acc
+            }
+        });
+    let mut sql = format!("UPDATE {} SET", T::NAME);
+    sql.push(' ');
+    sql.push_str(&filter.to_sql());
+    #[cfg(feature = "debug_sql")]
+    dbg!(&sql);
+    let mut statement = connection.prepare(&sql)?;
+    Ok(())
 }
 
 pub fn query_table_filtered<'a, T: IntoSqlTable<'a>>(

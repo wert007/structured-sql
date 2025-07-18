@@ -177,12 +177,12 @@ pub struct MovieWithRatings {
 // const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
 // const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 
-#[derive(Debug, IntoSqlVecTable)]
-struct FooWithVec {
-    #[silo(primary)]
-    iddasda: usize,
-    values: Vec<String>,
-}
+// #[derive(Debug, IntoSqlVecTable)]
+// struct FooWithVec {
+//     #[silo(primary)]
+//     iddasda: usize,
+//     values: Vec<String>,
+// }
 
 fn main() {
     dbg!(Test::COLUMNS);
