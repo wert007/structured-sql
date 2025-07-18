@@ -1040,7 +1040,7 @@ pub trait SqlTable<'a> {
     fn migrate(&self, actual_columns: &[SqlColumn]) -> Result<(), rusqlite::Error>;
     fn drain(
         &self,
-        callback: impl Fn(&Self::RowType) -> bool,
+        mut callback: impl FnMut(&Self::RowType) -> bool,
     ) -> Result<Vec<Self::RowType>, rusqlite::Error> {
         Ok(self
             .filter(Default::default())?
