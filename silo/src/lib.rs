@@ -1164,11 +1164,17 @@ impl<T: Filterable> Filterable for Option<T> {
     type Filtered = T::Filtered;
 
     fn must_be_equal(&self) -> Self::Filtered {
-        self.as_ref().unwrap().must_be_equal()
+        match self {
+            Some(it) => it.must_be_equal(),
+            None => Default::default(),
+        }
     }
 
     fn must_contain(&self) -> Self::Filtered {
-        self.as_ref().unwrap().must_contain()
+        match self {
+            Some(it) => it.must_contain(),
+            None => Default::default(),
+        }
     }
 }
 
