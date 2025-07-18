@@ -1035,6 +1035,23 @@ impl Base {
             .collect();
         let create_prefixed_columns_macro = format_ident!("column_names_with_prefix_for_{name}");
         let partial_field_definitions = members.iter().map(|m| m.create_partial_field_definition());
+
+        let as_primary_key_implementation =
+            if let Some(primary) = members.iter().find(|m| m.is_primary) {
+                let member_name = &primary.name;
+                assert!(
+                    !primary.name_is_generated,
+                    "How could a generated field be a primary key?"
+                );
+                quote!(
+                    Some(self.#member_name as u64)
+                )
+            } else {
+                quote!(
+                    None #(.or(self.#field_names_with_skips.as_primary_key()))*
+                )
+            };
+
         quote! {
             impl silo::HasPartialRepresentation for #name {
                 type Partial = #partial_name;
@@ -1087,6 +1104,10 @@ impl Base {
                     #(result.extend(&self.#field_names_with_skips.as_params()));*
                     ;
                     result
+                }
+
+                fn as_primary_key(&self) -> Option<u64> {
+                    #as_primary_key_implementation
                 }
             }
 
@@ -1229,6 +1250,10 @@ impl Base {
                         result.push(&silo::rusqlite::types::Null);
                     }
                     result
+                }
+
+                fn as_primary_key(&self) -> Option<u64> {
+                    None
                 }
             }
 

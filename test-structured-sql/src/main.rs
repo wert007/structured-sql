@@ -1,6 +1,5 @@
 use silo::{
-    AsParams, Database, IntoSqlTable, IntoSqlVecTable, MigrationHandler, PartialType, SqlTable,
-    SqlVecTable, StaticStringStorage,
+    AsParams, Database, IntoSqlTable, MigrationHandler, PartialType, SqlTable, StaticStringStorage,
 };
 
 // mod crashtest;
@@ -63,16 +62,17 @@ pub enum VideoUrl {
     Blob(String),
 }
 
-#[derive(Debug, Clone, IntoSqlTable)]
+#[derive(Default, Debug, Clone, IntoSqlTable)]
 pub enum Availability {
     Now {
         player_url: String,
         video_url: VideoUrl,
     },
+    #[default]
     Later,
 }
 
-#[derive(Debug, Clone, IntoSqlTable)]
+#[derive(Default, Debug, Clone, IntoSqlTable)]
 pub struct Movie {
     title: String,
     url: String,
@@ -119,7 +119,7 @@ pub struct MovieWithGenres {
     genre_id: u16,
 }
 
-#[derive(Clone, Debug, PartialEq, IntoSqlTable)]
+#[derive(Default, Clone, Debug, PartialEq, IntoSqlTable)]
 #[silo(migrate)]
 pub struct TmdbMovie {
     #[silo(primary)]
@@ -131,7 +131,7 @@ pub struct TmdbMovie {
     original_language: String,
     overview: Option<String>,
     // #[silo(skip)]
-    release_date: time::OffsetDateTime,
+    // release_date: time::OffsetDateTime,
     runtime: u32,
     homepage: Option<String>,
     #[silo(skip)]
@@ -147,13 +147,13 @@ pub struct TmdbMovie {
 
 impl MigrationHandler for TmdbMovie {
     fn migrate(
-        string_storage: &mut StaticStringStorage,
+        _string_storage: &mut StaticStringStorage,
         mut partial: Self::Partial,
-        row: &rusqlite::Row,
+        _row: &rusqlite::Row,
     ) -> Option<Self> {
-        if partial.release_date.is_none() {
-            partial.release_date = Some(time::OffsetDateTime::now_utc());
-        }
+        // if partial.release_date.is_none() {
+        //     partial.release_date = Some(time::OffsetDateTime::now_utc());
+        // }
         partial.genres = Some(Vec::new());
         partial.credits = Some(None);
         partial.transpose()
@@ -165,7 +165,7 @@ pub struct FutureMovie {
     pub url: String,
 }
 
-#[derive(Clone, Debug, IntoSqlTable)]
+#[derive(Default, Clone, Debug, IntoSqlTable)]
 pub struct MovieWithRatings {
     pub(crate) movie: Movie,
     pub(crate) ratings: TmdbMovie,
@@ -201,6 +201,9 @@ fn main() {
         age: f64::NAN,
     })
     .unwrap();
+
+    assert!(TmdbMovie::default().as_primary_key().is_some());
+    assert!(MovieWithRatings::default().as_primary_key().is_some());
 
     let f = TestFilter {
         value1: (PointFilter {

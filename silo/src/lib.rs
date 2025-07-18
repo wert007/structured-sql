@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     path::Path,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
 
@@ -65,9 +64,9 @@ mod test {
 
     impl FromRow for PartialCoord {
         fn try_from_row(
-            string_storage: &mut StaticStringStorage,
-            column_name: Option<&'static str>,
-            row: &rusqlite::Row,
+            _string_storage: &mut StaticStringStorage,
+            _column_name: Option<&'static str>,
+            _row: &rusqlite::Row,
         ) -> Option<Self> {
             // row.get("x")
             todo!();
@@ -95,8 +94,8 @@ mod test {
     impl IntoGenericFilter for CoordFilter {
         fn into_generic(
             self,
-            string_storage: &mut StaticStringStorage,
-            column_name: Option<&'static str>,
+            _string_storage: &mut StaticStringStorage,
+            _column_name: Option<&'static str>,
         ) -> GenericFilter {
             let mut columns = HashMap::new();
             if let Some(x) = self.x {
@@ -111,8 +110,8 @@ mod test {
 
     impl FromRow for Coord {
         fn try_from_row(
-            string_storage: &mut StaticStringStorage,
-            column_name: Option<&'static str>,
+            _string_storage: &mut StaticStringStorage,
+            _column_name: Option<&'static str>,
             row: &rusqlite::Row,
         ) -> Option<Self> {
             let x: f64 = row.get("x").optional().unwrap()?;
@@ -126,6 +125,10 @@ mod test {
 
         fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
             vec![&self.x, &self.y]
+        }
+
+        fn as_primary_key(&self) -> Option<u64> {
+            None
         }
     }
 
@@ -657,6 +660,7 @@ pub trait AsRepeatedParams {
 pub trait AsParams {
     const PARAM_COUNT: usize;
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
+    fn as_primary_key(&self) -> Option<u64>;
 }
 
 impl<T: AsParams> AsRepeatedParams for T {
@@ -680,6 +684,13 @@ impl<T: AsParams> AsParams for Option<T> {
         match self {
             Some(it) => it.as_params(),
             None => vec![&Null; T::PARAM_COUNT],
+        }
+    }
+
+    fn as_primary_key(&self) -> Option<u64> {
+        match self {
+            Some(it) => it.as_primary_key(),
+            None => None,
         }
     }
 
@@ -722,6 +733,10 @@ macro_rules! impl_as_params {
             const PARAM_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
+            }
+
+            fn as_primary_key(&self) -> Option<u64> {
+                None
             }
         }
 
@@ -784,6 +799,10 @@ macro_rules! impl_as_params_and_nan_is_none {
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
             }
+
+            fn as_primary_key(&self) -> Option<u64> {
+                None
+            }
         }
 
         impl FromRow for $t {
@@ -818,6 +837,10 @@ macro_rules! impl_as_params_and_column_filter {
             const PARAM_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
+            }
+
+            fn as_primary_key(&self) -> Option<u64> {
+                None
             }
         }
 
