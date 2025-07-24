@@ -1170,7 +1170,7 @@ impl Base {
                 impl From<#row_type_name> for #partial_name {
                     fn from(value: #row_type_name) -> #partial_name {
                         #partial_name {
-                            #(#field_names_with_skips: Some(value.#field_names_with_skips),)*
+                            #(#field_names_with_skips: value.#field_names_with_skips.into(),)*
                         }
                     }
                 }
@@ -1357,7 +1357,7 @@ impl Base {
                 impl From<#name> for #partial_name {
                     fn from(value: #name) -> #partial_name {
                         #partial_name {
-                            #(#field_names_with_skips: Some(value.#field_names_with_skips),)*
+                            #(#field_names_with_skips: value.#field_names_with_skips.into(),)*
                         }
                     }
                 }
@@ -1468,7 +1468,7 @@ impl Base {
                 impl From<#name> for #partial_name {
                     fn from(value: #name) -> #partial_name {
                         #partial_name {
-                            variant: Some((*value.variant_name()).to_string()),
+                            variant: (*value.variant_name()).to_string().into(),
                             }
                     }
                 }

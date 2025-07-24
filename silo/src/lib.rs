@@ -79,6 +79,15 @@ mod test {
         }
     }
 
+    impl From<Coord> for PartialCoord {
+        fn from(value: Coord) -> Self {
+            Self {
+                x: value.x.into(),
+                y: value.y.into(),
+            }
+        }
+    }
+
     impl HasValue for PartialCoord {
         fn has_values(&self) -> bool {
             self.x.has_values() || self.y.has_values()
@@ -929,7 +938,7 @@ pub trait HasValue {
     fn has_values(&self) -> bool;
 }
 
-pub trait HasPartialRepresentation<T = Self>: Sized {
+pub trait HasPartialRepresentation<T = Self>: Sized + Into<Self::Partial> {
     type Partial: HasValue;
     // type Partial: PartialType<T>;
 }
@@ -940,7 +949,10 @@ impl<T> HasValue for Option<T> {
     }
 }
 
-impl<T: HasPartialRepresentation> HasPartialRepresentation for Option<T> {
+impl<T: HasPartialRepresentation> HasPartialRepresentation for Option<T>
+where
+    Option<<T as HasPartialRepresentation>::Partial>: From<Option<T>>,
+{
     type Partial = Option<T::Partial>;
 }
 
@@ -997,7 +1009,10 @@ pub trait IntoSqlTable<'a>: FromRow + AsParams + HasPartialRepresentation + Filt
     type Table: SqlTable<'a>;
 }
 
-impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T> {
+impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T>
+where
+    Option<<T as HasPartialRepresentation>::Partial>: From<Option<T>>,
+{
     const COLUMNS: &'static [SqlColumn] = T::COLUMNS;
 
     const NAME: &'static str = T::NAME;
