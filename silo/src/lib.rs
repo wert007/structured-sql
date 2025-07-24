@@ -37,7 +37,7 @@ mod test {
     use rusqlite::{Connection, OptionalExtension};
 
     use crate::{
-        AsParams, Database, Filterable, FromRow, GenericFilter, HasPartialRepresentation,
+        AsParams, Database, Filterable, FromRow, GenericFilter, HasPartialRepresentation, HasValue,
         IntoGenericFilter, IntoSqlTable, MigrationHandler, PartialType, SqlColumn, SqlColumnFilter,
         SqlColumnType, SqlTable, StaticStringStorage, ToRows, handle_migration,
     };
@@ -76,6 +76,12 @@ mod test {
         ) -> Option<Self> {
             // row.get("x")
             todo!();
+        }
+    }
+
+    impl HasValue for PartialCoord {
+        fn has_values(&self) -> bool {
+            self.x.has_values() || self.y.has_values()
         }
     }
 
@@ -919,9 +925,19 @@ impl<T> PartialType<Option<T>> for Option<Option<T>>
     }
 }
 
+pub trait HasValue {
+    fn has_values(&self) -> bool;
+}
+
 pub trait HasPartialRepresentation<T = Self>: Sized {
-    type Partial;
+    type Partial: HasValue;
     // type Partial: PartialType<T>;
+}
+
+impl<T> HasValue for Option<T> {
+    fn has_values(&self) -> bool {
+        self.is_some()
+    }
 }
 
 impl<T: HasPartialRepresentation> HasPartialRepresentation for Option<T> {
@@ -1395,29 +1411,74 @@ impl Convert<f64> for SqlColumnType {
     }
 }
 
+pub trait PartialRow {
+    fn used_column_names(&self, column_name: Option<String>) -> Vec<String>;
+    fn used_values(&self) -> Vec<&dyn rusqlite::ToSql>;
+}
+
+impl<T: AsParams> PartialRow for Option<T> {
+    fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
+        if self.has_values() {
+            vec![column_name.expect("Needs column name!")]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn used_values(&self) -> Vec<&dyn rusqlite::ToSql> {
+        if let Some(value) = self {
+            value.as_params()
+        } else {
+            Vec::new()
+        }
+    }
+}
+
 pub fn update_rows<'a, T: IntoSqlTable<'a>>(
     connection: &&'a rusqlite::Connection,
     filter: GenericFilter,
     value: T::Partial,
-) -> Result<(), rusqlite::Error> {
-    let columns = T::COLUMNS
+) -> Result<(), rusqlite::Error>
+where
+    T::Partial: PartialRow,
+{
+    // let columns = T::COLUMNS
+    //     .into_iter()
+    //     .map(|c| c.name)
+    //     .fold(String::new(), |mut acc, cur| {
+    //         if acc.is_empty() {
+    //             cur.into()
+    //         } else {
+    //             acc.push_str(", ");
+    //             acc.push_str(cur);
+    //             acc
+    //         }
+    //     });
+    let columns: Vec<String> = value.used_column_names(None);
+    if columns.is_empty() {
+        return Ok(());
+    }
+    let columns_set = columns
         .into_iter()
-        .map(|c| c.name)
+        .enumerate()
+        .map(|(i, c)| format!("{c} = ?{i}"))
         .fold(String::new(), |mut acc, cur| {
             if acc.is_empty() {
-                cur.into()
+                cur
             } else {
                 acc.push_str(", ");
-                acc.push_str(cur);
+                acc.push_str(&cur);
                 acc
             }
         });
-    let mut sql = format!("UPDATE {} SET", T::NAME);
+    let values: Vec<&dyn rusqlite::ToSql> = value.used_values();
+    let mut sql = format!("UPDATE {} SET {columns_set}", T::NAME);
     sql.push(' ');
     sql.push_str(&filter.to_sql());
     #[cfg(feature = "debug_sql")]
     dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
+    statement.execute(values.as_slice())?;
     Ok(())
 }
 
