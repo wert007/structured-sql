@@ -1166,6 +1166,14 @@ impl Base {
             }
 
 
+
+                impl From<#row_type_name> for #partial_name {
+                    fn from(value: #row_type_name) -> #partial_name {
+                        #partial_name {
+                            #(#field_names_with_skips: Some(value.#field_names_with_skips),)*
+                        }
+                    }
+                }
                       impl silo::HasValue for #partial_name {
                         fn has_values(&self) -> bool {
                             #(self.#field_names_with_skips.has_values() ||)* false
@@ -1344,6 +1352,16 @@ impl Base {
                           #(#visibility #partial_field_definitions,)*
                       }
 
+
+
+                impl From<#name> for #partial_name {
+                    fn from(value: #name) -> #partial_name {
+                        #partial_name {
+                            #(#field_names_with_skips: Some(value.#field_names_with_skips),)*
+                        }
+                    }
+                }
+
                       impl silo::HasValue for #partial_name {
                         fn has_values(&self) -> bool {
                             #(self.#field_names_with_skips.has_values() ||)* false
@@ -1444,6 +1462,16 @@ impl Base {
                  #visibility struct #partial_name {
                      variant: Option<String>,
                  }
+
+
+
+                impl From<#name> for #partial_name {
+                    fn from(value: #name) -> #partial_name {
+                        #partial_name {
+                            variant: Some((*value.variant_name()).to_string()),
+                            }
+                    }
+                }
 
         impl silo::HasValue for #partial_name {
                              fn has_values(&self) -> bool {
