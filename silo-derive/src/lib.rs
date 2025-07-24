@@ -1243,6 +1243,7 @@ impl Base {
                     Some(Self {#( #field_names_with_skips),*,..Default::default()})
                 }
             }
+
             impl silo::FromRow for #row_type_name {
                 fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
                     <#partial_name>::try_from_row(string_storage, row_name, row)?.transpose()

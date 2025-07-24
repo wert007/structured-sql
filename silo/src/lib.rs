@@ -1129,7 +1129,8 @@ impl SqlColumnFilter<SqlValue> {
             SqlColumnFilter::MustBeEqual(v) => format!(" = {}", v.to_sql()),
             SqlColumnFilter::Contains(v) => {
                 let string_representation = v.to_sql();
-                if string_representation.starts_with('"') && string_representation.ends_with('"') {
+                if string_representation.starts_with('\'') && string_representation.ends_with('\'')
+                {
                     format!(
                         " LIKE \"%{}%\"",
                         &string_representation[1..string_representation.len() - 2]
