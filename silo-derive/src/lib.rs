@@ -907,6 +907,7 @@ impl Base {
                 type Filtered = #filter_name;
 
                 fn must_be_equal(&self) -> Self::Filtered {
+                    use silo::AsParams;
                     let mut string_storage = silo::StaticStringStorage::new();
                     if let Some((column, value)) = self.as_primary_key(&mut string_storage, None) {
                         Default::default()
