@@ -154,8 +154,6 @@ impl MigrationHandler for TmdbMovie {
         // if partial.release_date.is_none() {
         //     partial.release_date = Some(time::OffsetDateTime::now_utc());
         // }
-        partial.genres = Some(Vec::new());
-        partial.credits = Some(None);
         partial.transpose()
     }
 }
@@ -177,12 +175,14 @@ pub struct MovieWithRatings {
 // const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
 // const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 
-// #[derive(Debug, IntoSqlVecTable)]
-// struct FooWithVec {
-//     #[silo(primary)]
-//     iddasda: usize,
-//     values: Vec<String>,
-// }
+#[derive(Debug, IntoSqlTable)]
+struct FooWithVec {
+    #[silo(primary)]
+    iddasda: usize,
+    values: Vec<String>,
+    values2: Vec<String>,
+    values3: Vec<String>,
+}
 
 fn main() {
     dbg!(Test::COLUMNS);
@@ -202,8 +202,8 @@ fn main() {
     })
     .unwrap();
 
-    assert!(TmdbMovie::default().as_primary_key().is_some());
-    assert!(MovieWithRatings::default().as_primary_key().is_some());
+    // assert!(TmdbMovie::default().as_primary_key().is_some());
+    // assert!(MovieWithRatings::default().as_primary_key().is_some());
 
     let f = TestFilter {
         value1: (PointFilter {

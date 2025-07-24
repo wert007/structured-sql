@@ -2,7 +2,7 @@ use heck::{ToSnakeCase, ToSnekCase};
 use ident_case_conversions::CaseConversions;
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
-use syn::{Attribute, Ident, LitInt, Type, Visibility};
+use syn::{Attribute, Error, Ident, LitInt, Type, Visibility};
 
 enum StructuredAttributeArguments {
     Identifier(String),
@@ -141,7 +141,6 @@ struct Member {
     is_optional: bool,
     is_skipped: bool,
     name_is_generated: bool,
-    supports_vec: bool,
 }
 
 impl std::fmt::Debug for Member {
@@ -158,26 +157,20 @@ impl std::fmt::Debug for Member {
     }
 }
 impl Member {
-    fn from_struct_fields<const SUPPORTS_VEC: bool>(
-        struct_name: syn::Ident,
-        fields: syn::Fields,
-    ) -> Vec<Member> {
+    fn from_struct_fields(struct_name: syn::Ident, fields: syn::Fields) -> Vec<Member> {
         let mut field_index = 0;
         match fields {
             syn::Fields::Named(fields_named) => {
-                Self::from_named_fields::<SUPPORTS_VEC>(struct_name, fields_named, false)
+                Self::from_named_fields(struct_name, fields_named, false)
             }
-            syn::Fields::Unnamed(fields_unnamed) => Self::from_unnamed_fields::<SUPPORTS_VEC>(
-                &mut field_index,
-                struct_name,
-                fields_unnamed,
-                false,
-            ),
+            syn::Fields::Unnamed(fields_unnamed) => {
+                Self::from_unnamed_fields(&mut field_index, struct_name, fields_unnamed, false)
+            }
             syn::Fields::Unit => Vec::new(),
         }
     }
 
-    fn from_named_fields<const SUPPORTS_VEC: bool>(
+    fn from_named_fields(
         variant: Ident,
         fields: syn::FieldsNamed,
         is_optional: bool,
@@ -186,11 +179,11 @@ impl Member {
             .named
             .iter()
             .enumerate()
-            .map(|(i, f)| Member::from_field::<SUPPORTS_VEC>(i, variant.clone(), f, is_optional))
+            .map(|(i, f)| Member::from_field(i, variant.clone(), f, is_optional))
             .collect()
     }
 
-    fn from_unnamed_fields<const SUPPORTS_VEC: bool>(
+    fn from_unnamed_fields(
         base: &mut usize,
         variant: Ident,
         fields: syn::FieldsUnnamed,
@@ -200,20 +193,14 @@ impl Member {
             .unnamed
             .iter()
             .map(|f| {
-                let result =
-                    Member::from_field::<SUPPORTS_VEC>(*base, variant.clone(), f, is_optional);
+                let result = Member::from_field(*base, variant.clone(), f, is_optional);
                 *base += 1;
                 result
             })
             .collect()
     }
 
-    fn from_field<const SUPPORTS_VEC: bool>(
-        index: usize,
-        variant: syn::Ident,
-        f: &syn::Field,
-        is_optional: bool,
-    ) -> Member {
+    fn from_field(index: usize, variant: syn::Ident, f: &syn::Field, is_optional: bool) -> Member {
         let AttributeFieldData {
             is_primary,
             is_unique,
@@ -234,7 +221,6 @@ impl Member {
             is_optional,
             is_skipped: is_skip,
             name_is_generated,
-            supports_vec: SUPPORTS_VEC,
         }
     }
 
@@ -251,10 +237,10 @@ impl Member {
     fn from_variant(base: &mut usize, v: &syn::Variant) -> Vec<Member> {
         match v.fields.clone() {
             syn::Fields::Named(fields_named) => {
-                Self::from_named_fields::<false>(v.ident.clone(), fields_named, true)
+                Self::from_named_fields(v.ident.clone(), fields_named, true)
             }
             syn::Fields::Unnamed(fields_unnamed) => {
-                Self::from_unnamed_fields::<false>(base, v.ident.clone(), fields_unnamed, true)
+                Self::from_unnamed_fields(base, v.ident.clone(), fields_unnamed, true)
             }
             syn::Fields::Unit => Vec::new(),
         }
@@ -268,8 +254,8 @@ impl Member {
     fn create_has_filter_field(&self) -> proc_macro2::TokenStream {
         let Member { name, type_, .. } = self;
         let name = format_ident!("has_{name}");
-        if Member::as_simple_type(type_, false, self.supports_vec).is_some() {
-            let type_ = Member::try_strip_auxiliary(self.supports_vec, type_);
+        if Member::as_simple_type(type_, false).is_some() {
+            let type_ = Member::try_strip_auxiliary(type_);
             quote! { #name(mut self, expected: #type_) -> Self}
         } else {
             quote! { #name(mut self, expected: <#type_ as silo::Filterable>::Filtered) -> Self}
@@ -279,8 +265,8 @@ impl Member {
     fn create_contains_filter_field(&self) -> proc_macro2::TokenStream {
         let Member { name, type_, .. } = self;
         let name = format_ident!("{name}_contains");
-        if Member::as_simple_type(type_, false, self.supports_vec).is_some() {
-            let type_ = Member::try_strip_auxiliary(self.supports_vec, type_);
+        if Member::as_simple_type(type_, false).is_some() {
+            let type_ = Member::try_strip_auxiliary(type_);
             quote! { #name(mut self, expected: #type_) -> Self}
         } else {
             quote! { #name(mut self, expected: <#type_ as silo::Filterable>::Filtered) -> Self}
@@ -306,7 +292,7 @@ impl Member {
         let snake_case_name = name.to_string().trim_start_matches("r#").to_snake_case();
         let snake_case_name = syn::LitStr::new(&snake_case_name, name.span());
 
-        if let Some(t) = Member::as_simple_type(type_, *is_optional, self.supports_vec) {
+        if let Some(t) = Member::as_simple_type(type_, *is_optional) {
             quote! { &[silo::SqlColumn {
                 name: #snake_case_name,
                 r#type: #t,
@@ -314,8 +300,35 @@ impl Member {
                 is_primary: #is_primary,
             }] }
         } else {
-            let type_name =
-                Member::type_to_name(Member::try_strip_auxiliary(self.supports_vec, type_));
+            let type_name = Member::type_to_name(Member::try_strip_auxiliary(type_));
+            let column_macro_name = format_ident!("column_names_with_prefix_for_{type_name}");
+            quote! { &#column_macro_name!(#snake_case_name) }
+        }
+    }
+
+    fn create_single_column_definition(&self) -> proc_macro2::TokenStream {
+        let Member {
+            name,
+            type_,
+            is_primary,
+            is_unique,
+            is_optional,
+            ..
+        } = self;
+        let is_unique = syn::LitBool::new(*is_unique, name.span());
+        let is_primary = syn::LitBool::new(*is_primary, name.span());
+        let snake_case_name = name.to_string().trim_start_matches("r#").to_snake_case();
+        let snake_case_name = syn::LitStr::new(&snake_case_name, name.span());
+
+        if let Some(t) = Member::as_simple_type(Member::try_strip_vec(type_), *is_optional) {
+            quote! { &[silo::SqlColumn {
+                name: #snake_case_name,
+                r#type: #t,
+                is_unique: #is_unique,
+                is_primary: #is_primary,
+            }] }
+        } else {
+            let type_name = Member::type_to_name(Member::try_strip_vec_and_option(type_));
             let column_macro_name = format_ident!("column_names_with_prefix_for_{type_name}");
             quote! { &#column_macro_name!(#snake_case_name) }
         }
@@ -335,7 +348,7 @@ impl Member {
         let snake_case_name = name.to_string().trim_start_matches("r#").to_snake_case();
         let snake_case_name = syn::LitStr::new(&format!("_{snake_case_name}"), name.span());
 
-        if let Some(t) = Member::as_simple_type(type_, *is_optional, self.supports_vec) {
+        if let Some(t) = Member::as_simple_type(type_, *is_optional) {
             quote! { &[silo::SqlColumn {
                 name: concat!($prefix, #snake_case_name),
                 r#type: #t,
@@ -343,8 +356,7 @@ impl Member {
                 is_primary: #is_primary,
             }] }
         } else {
-            let type_name =
-                Member::type_to_name(Member::try_strip_auxiliary(self.supports_vec, type_));
+            let type_name = Member::type_to_name(Member::try_strip_auxiliary(type_));
             let column_macro_name = format_ident!("column_names_with_prefix_for_{type_name}");
             quote! { &#column_macro_name!(concat!($prefix, #snake_case_name)) }
         }
@@ -425,15 +437,9 @@ impl Member {
         members.iter().filter(|m| &m.variant == v).collect()
     }
 
-    fn as_simple_type(
-        type_: &Type,
-        is_optional: bool,
-        supports_vec: bool,
-    ) -> Option<proc_macro2::TokenStream> {
+    fn as_simple_type(type_: &Type, is_optional: bool) -> Option<proc_macro2::TokenStream> {
         match type_ {
-            Type::Path(type_path) => {
-                Member::path_as_simple_type(&type_path.path, is_optional, supports_vec)
-            }
+            Type::Path(type_path) => Member::path_as_simple_type(&type_path.path, is_optional),
             _ => None,
         }
     }
@@ -441,7 +447,6 @@ impl Member {
     fn path_as_simple_type(
         path: &syn::Path,
         is_optional: bool,
-        supports_vec: bool,
     ) -> Option<proc_macro2::TokenStream> {
         let mut seen_path = Vec::with_capacity(path.segments.len());
         for segment in &path.segments {
@@ -458,20 +463,7 @@ impl Member {
                 "Option" => match &segment.arguments {
                     syn::PathArguments::AngleBracketed(angle_bracketed_generic_arguments) => {
                         match angle_bracketed_generic_arguments.args.iter().next()? {
-                            syn::GenericArgument::Type(t) => {
-                                Member::as_simple_type(t, true, supports_vec)
-                            }
-                            _ => None,
-                        }
-                    }
-                    _ => None,
-                },
-                "Vec" if supports_vec => match &segment.arguments {
-                    syn::PathArguments::AngleBracketed(angle_bracketed_generic_arguments) => {
-                        match angle_bracketed_generic_arguments.args.iter().next()? {
-                            syn::GenericArgument::Type(t) => {
-                                Member::as_simple_type(t, is_optional, supports_vec)
-                            }
+                            syn::GenericArgument::Type(t) => Member::as_simple_type(t, true),
                             _ => None,
                         }
                     }
@@ -527,12 +519,8 @@ impl Member {
         variants.iter().map(|v| quote! {stringify!(#v)}).collect()
     }
 
-    fn try_strip_auxiliary(supports_vec: bool, type_: &Type) -> &Type {
-        if supports_vec {
-            Member::try_strip_vec_and_option(type_)
-        } else {
-            Member::try_strip_option(type_)
-        }
+    fn try_strip_auxiliary(type_: &Type) -> &Type {
+        Member::try_strip_option(type_)
     }
 
     fn try_strip_option(type_: &Type) -> &Type {
@@ -624,7 +612,23 @@ impl Member {
 
     fn create_partial_field_definition(&self) -> proc_macro2::TokenStream {
         let Member { name, type_, .. } = self;
-        quote! { #name: Option<#type_>}
+        quote! { #name: <#type_ as silo::HasPartialRepresentation>::Partial}
+    }
+
+    fn has_vec(&self) -> bool {
+        match &self.type_ {
+            Type::Path(type_path) => {
+                let Some(segment) = type_path.path.segments.iter().next() else {
+                    return false;
+                };
+                if segment.ident.to_string() != "Vec" {
+                    return false;
+                } else {
+                    return true;
+                }
+            }
+            _ => false,
+        }
     }
 }
 
@@ -638,6 +642,8 @@ struct Base {
     members: Vec<Member>,
     on_conflict: proc_macro2::TokenStream,
     migration_handler: proc_macro2::TokenStream,
+    has_vec_as_member: bool,
+    errors: proc_macro2::TokenStream,
 }
 
 impl std::fmt::Debug for Base {
@@ -663,13 +669,14 @@ impl Base {
         let table_name = format_ident!("{name}Table");
         let filter_name = format_ident!("{name}Filter");
         let partial_name = format_ident!("Partial{name}");
-        let members = Member::from_struct_fields::<false>(name.clone(), data_struct.fields);
+        let members = Member::from_struct_fields(name.clone(), data_struct.fields);
         let migration_handler = if attribute_struct_data.has_custom_migration_handler {
             proc_macro2::TokenStream::new()
         } else {
             quote! { impl silo::MigrationHandler for #name {}
             }
         };
+        let has_vec_as_member = members.iter().any(|m| !m.is_skipped && m.has_vec());
         // Add Partial types for Migration here!
         Self {
             name,
@@ -681,6 +688,8 @@ impl Base {
             members,
             on_conflict,
             migration_handler,
+            has_vec_as_member,
+            errors: proc_macro2::TokenStream::new(),
         }
     }
 
@@ -704,6 +713,13 @@ impl Base {
             quote! { impl silo::MigrationHandler for #name {}
             }
         };
+        let mut errors = proc_macro2::TokenStream::new();
+        if members.iter().any(|m| !m.is_skipped && m.has_vec()) {
+            // compile_error!("Only structs can have vectors not enums for now!")
+            errors.extend(
+                Error::new(name.span(), "Cannot have a vec inside an enum!").into_compile_error(),
+            );
+        }
         Self {
             name,
             table_name,
@@ -714,6 +730,8 @@ impl Base {
             members,
             on_conflict,
             migration_handler,
+            has_vec_as_member: false,
+            errors,
         }
     }
 
@@ -725,8 +743,14 @@ impl Base {
             partial_name,
             visibility,
             on_conflict,
+            has_vec_as_member,
             ..
         } = self;
+        let row_type = if *has_vec_as_member {
+            format_ident!("{name}RowType")
+        } else {
+            name.clone()
+        };
         quote! {
         #visibility struct #table_name<'a> {
             connection: &'a silo::rusqlite::Connection,
@@ -735,12 +759,12 @@ impl Base {
 
 
         impl<'a> silo::SqlTable<'a> for #table_name<'a> {
-            type RowType = #name;
+            type RowType = #row_type;
 
             const INSERT_FAILURE_BEHAVIOR: silo::SqlFailureBehavior = #on_conflict;
 
 
-            fn insert(&self, row: Self::RowType) -> Result<(), silo::rusqlite::Error> {
+            fn insert(&self, row: impl silo::ToRows<Self::RowType>) -> Result<(), silo::rusqlite::Error> {
                 use silo::AsParams;
                 let columns = Self::RowType::COLUMNS.into_iter().map(|c| c.name).fold(
                     String::new(),
@@ -775,10 +799,10 @@ impl Base {
                         Self::RowType::NAME,
                     );
 
-                self.connection.execute(
-                    &sql,
-                    row.as_params().as_slice(),
-                )?;
+                let mut stmt = self.connection.prepare(&sql)?;
+                for row in row.to_rows() {
+                    stmt.execute(row.as_params().as_slice())?;
+                }
                 Ok(())
             }
 
@@ -883,9 +907,14 @@ impl Base {
                 type Filtered = #filter_name;
 
                 fn must_be_equal(&self) -> Self::Filtered {
-                    let mut result = #filter_name::default();
-                    #(result.#filter_field_names = self.#filter_field_names.must_be_equal();)*
-                    result
+                    let mut string_storage = StaticStringStorage::new();
+                    if let Some((column, value)) = self.as_primary_key(&mut string_storage, None) {
+                        Default::default()
+                    } else {
+                        let mut result = #filter_name::default();
+                        #(result.#filter_field_names = self.#filter_field_names.must_be_equal();)*
+                        result
+                    }
                 }
                 fn must_contain(&self) -> Self::Filtered {
                     let mut result = #filter_name::default();
@@ -1004,6 +1033,7 @@ impl Base {
             members,
             visibility,
             migration_handler,
+            has_vec_as_member,
             ..
         } = self;
         let field_names_with_skips: Vec<_> = members
@@ -1034,41 +1064,135 @@ impl Base {
             .map(|m| m.create_column_definition_in_macro())
             .collect();
         let create_prefixed_columns_macro = format_ident!("column_names_with_prefix_for_{name}");
-        let partial_field_definitions = members.iter().map(|m| m.create_partial_field_definition());
+        let partial_field_definitions: Vec<_> = members
+            .iter()
+            .filter(|m| !m.is_skipped)
+            .map(|m| m.create_partial_field_definition())
+            .collect();
 
-        let as_primary_key_implementation =
-            if let Some(primary) = members.iter().find(|m| m.is_primary) {
-                let member_name = &primary.name;
-                assert!(
-                    !primary.name_is_generated,
-                    "How could a generated field be a primary key?"
-                );
-                quote!(
-                    Some(self.#member_name as u64)
-                )
-            } else {
-                quote!(
-                    None #(.or(self.#field_names_with_skips.as_primary_key()))*
-                )
-            };
+        let as_primary_key_implementation = if let Some(primary) =
+            members.iter().find(|m| m.is_primary)
+        {
+            let member_name = &primary.name;
+            assert!(
+                !primary.name_is_generated,
+                "How could a generated field be a primary key?"
+            );
+            quote!(
+                let column_name = column_name.map(|c| string_storage.store(&[c, "_", stringify!(#member_name)])).unwrap_or(stringify!(#member_name));
+                Some((stringify!(#member_name), self.#member_name as u64))
+            )
+        } else {
+            quote!(
+                let result = None;
+                #(
+                    let c = column_name.map(|c| string_storage.store(&[c, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
+                    let result = result.or(self.#field_names_with_skips.as_primary_key(string_storage, Some(c)));)*
+                result
+            )
+        };
 
-        quote! {
-            impl silo::HasPartialRepresentation for #name {
+        let row_type = if *has_vec_as_member {
+            let row_type_name = format_ident!("{name}RowType");
+            let row_type_fields = members.iter().map(|m| {
+                let t = m.create_single_field_type();
+                let n = &m.name;
+                quote!(#n: #t,)
+            });
+            let partial_name = format_ident!("Partial{row_type_name}");
+            let partial_field_definitions = members.iter().filter(|m| !m.is_skipped).map(|m| {
+                let t = Member::try_strip_vec_and_option(&m.type_);
+                let n = &m.name;
+                quote!(#n: Option<#t>,)
+            });
+            let field_types_with_skips: Vec<_> = members
+                .iter()
+                .filter(|m| !m.is_skipped)
+                .map(|c| c.create_single_field_type())
+                .collect();
+            let iterable_field_names: Vec<_> = members
+                .iter()
+                .filter(|m| !m.is_skipped && m.has_vec())
+                .map(|m| m.create_field_name())
+                .collect();
+            let cloneable_field_names: Vec<_> = members
+                .iter()
+                .filter(|m| !m.is_skipped && !m.has_vec())
+                .map(|m| m.create_field_name())
+                .collect();
+
+            let iterable_fields_as_iterator = members
+                .iter()
+                .filter(|m| !m.is_skipped && m.has_vec())
+                .fold(proc_macro2::TokenStream::new(), |acc, cur| {
+                    let name = cur.create_field_name();
+                    if acc.is_empty() {
+                        quote!(self.#name.into_iter())
+                    } else {
+                        quote!(#acc.zip(self.#name))
+                    }
+                });
+            let iterable_fields_as_pattern_match = members
+                .iter()
+                .filter(|m| !m.is_skipped && m.has_vec())
+                .fold(proc_macro2::TokenStream::new(), |acc, cur| {
+                    let name = cur.create_field_name();
+                    if acc.is_empty() {
+                        quote!(#name)
+                    } else {
+                        quote!((#acc, #name))
+                    }
+                });
+
+            let columns: Vec<_> = members
+                .iter()
+                .filter(|m| !m.is_skipped)
+                .map(|m| m.create_single_column_definition())
+                .collect();
+
+            quote! {
+                struct #row_type_name {
+                    #(#row_type_fields)*
+                }
+
+                impl silo::HasPartialRepresentation for #row_type_name {
                 type Partial = #partial_name;
             }
 
+            #[derive(Default)]
             #visibility struct #partial_name {
-                #(#partial_field_definitions,)*
+                #(#partial_field_definitions)*
             }
 
-            impl silo::PartialType<#name> for #partial_name {
-                fn transpose(self) -> Option<#name> {
+            impl silo::PartialType<#row_type_name> for #partial_name {
+                fn transpose(self) -> Option<#row_type_name> {
                     #(
-                        let #field_names_without_skips = self.#field_names_without_skips?;
+                        let #field_names_with_skips = self.#field_names_with_skips.transpose()?;
                     )*
-                    Some(#name {
+                    #( let #skipped_field_names = Default::default();)*
+                    Some(#row_type_name {
                         #(#field_names_without_skips,)*
                     })
+                }
+            }
+
+            impl silo::ToRows<#row_type_name> for #row_type_name {
+                fn to_rows(self) -> Vec<#row_type_name> {
+                    vec![self]
+                }
+            }
+
+
+            impl silo::ToRows<#row_type_name> for #name {
+                fn to_rows(self) -> Vec<#row_type_name> {
+                    let mut result = Vec::new();
+                    for  #iterable_fields_as_pattern_match   in #iterable_fields_as_iterator {
+                        result.push(#row_type_name {
+                            #(#cloneable_field_names: self.#cloneable_field_names.clone(),)*
+                            #(#iterable_field_names,)*
+                        });
+                    }
+                    result
                 }
             }
 
@@ -1077,9 +1201,61 @@ impl Base {
                     use silo::rusqlite::OptionalExtension;
                     #(
                         let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
-                        let #field_names_with_skips = <#field_types_with_skips>::try_from_row(string_storage, Some(actual_column_name), row);)*
-                    #(let #skipped_field_names = None;)*
-                    Some(Self {#( #field_names_without_skips),*})
+                        let #field_names_with_skips = <<#field_types_with_skips as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row)?;)*
+                    Some(Self {#( #field_names_with_skips),*,..Default::default()})
+                }
+            }
+            impl silo::FromRow for #row_type_name {
+                fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
+                    <#partial_name>::try_from_row(string_storage, row_name, row)?.transpose()
+                }
+            }
+
+
+            impl silo::AsParams for #row_type_name {
+                const PARAM_COUNT: usize = #(<#field_types_with_skips as silo::AsParams>::PARAM_COUNT +)* 0;
+                fn as_params(&self) -> Vec<&dyn silo::rusqlite::ToSql> {
+                    use silo::AsParams;
+                    let mut result = Vec::new();
+                    #(result.extend(&self.#field_names_with_skips.as_params()));*
+                    ;
+                    result
+                }
+
+                fn as_primary_key(&self,
+                    string_storage: &mut StaticStringStorage,
+                    column_name: Option<&'static str>,
+                ) -> Option<(&'static str, u64)> {
+                    None
+                }
+            }
+
+            impl<'a> silo::IntoSqlTable<'a> for #row_type_name {
+                type Table = #table_name<'a>;
+                const COLUMNS: &'static [silo::SqlColumn] = &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
+                    #(#columns,)*
+                ]};
+
+                const NAME: &'static str = stringify!(#table_name);
+            }
+            }
+        } else {
+            quote! {
+
+
+            impl silo::ToRows<#name> for #name {
+                fn to_rows(self) -> Vec<#name> {
+                    vec![self]
+                }
+            }
+
+            impl silo::FromRow for #partial_name {
+                fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
+                    use silo::rusqlite::OptionalExtension;
+                    #(
+                        let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
+                        let #field_names_with_skips = <<#field_types_with_skips as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row)?;)*
+                    Some(Self {#( #field_names_with_skips),*, ..Default::default()})
                 }
             }
 
@@ -1106,10 +1282,14 @@ impl Base {
                     result
                 }
 
-                fn as_primary_key(&self) -> Option<u64> {
+                fn as_primary_key(&self,
+                    string_storage: &mut StaticStringStorage,
+                    column_name: Option<&'static str>,
+                ) -> Option<(&'static str, u64)> {
                     #as_primary_key_implementation
                 }
             }
+
 
             impl<'a> silo::IntoSqlTable<'a> for #name {
                 type Table = #table_name<'a>;
@@ -1119,18 +1299,46 @@ impl Base {
 
                 const NAME: &'static str = stringify!(#table_name);
             }
-
-            #migration_handler
-
-            #[allow(unused_macros)]
-            macro_rules! #create_prefixed_columns_macro {
-                ($prefix:expr) => {
-                    silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
-                    #(#columns_in_macro,)*
-                ]}
-            };
             }
-        }
+        };
+
+        quote! {
+                      #row_type
+
+              impl silo::HasPartialRepresentation for #name {
+                          type Partial = #partial_name;
+                      }
+
+                      #[derive(Default)]
+                      #visibility struct #partial_name {
+                          #(#visibility #partial_field_definitions,)*
+                      }
+
+                      impl silo::PartialType<#name> for #partial_name {
+                          fn transpose(self) -> Option<#name> {
+
+        #(
+                              let #field_names_with_skips = self.#field_names_with_skips.transpose()?;
+                          )*
+                          #( let #skipped_field_names = Default::default();)*
+                          Some(#name {
+                              #(#field_names_without_skips,)*
+                          })
+                          }
+                      }
+
+
+                      #migration_handler
+
+                      #[allow(unused_macros)]
+                      macro_rules! #create_prefixed_columns_macro {
+                          ($prefix:expr) => {
+                              silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
+                              #(#columns_in_macro,)*
+                          ]}
+                      };
+                      }
+                  }
     }
 
     fn create_conversions_enum(&self, variants: &[syn::Ident]) -> proc_macro2::TokenStream {
@@ -1174,6 +1382,7 @@ impl Base {
                 type Partial = #partial_name;
             }
 
+            #[derive(Default)]
             #visibility struct #partial_name {
                 variant: Option<String>,
             }
@@ -1252,7 +1461,9 @@ impl Base {
                     result
                 }
 
-                fn as_primary_key(&self) -> Option<u64> {
+                fn as_primary_key(&self,     _string_storage: &mut StaticStringStorage,
+                    _column_name: Option<&'static str>,
+                ) -> Option<(&'static str, u64)> {
                     None
                 }
             }
@@ -1296,6 +1507,10 @@ impl Base {
 
 impl ToTokens for Base {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        if !self.errors.is_empty() {
+            tokens.extend(self.errors.clone());
+            return;
+        }
         let filter = self.create_filter();
         tokens.extend(filter);
         let table = self.create_table();
@@ -1318,411 +1533,6 @@ pub fn derive_into_sql_table(input: TokenStream) -> TokenStream {
         }
         syn::Data::Enum(data_enum) => {
             Base::from_enum(input.attrs, input.ident, input.vis, data_enum)
-        }
-        syn::Data::Union(_) => {
-            panic!("Unions need a clear representation, either use a struct or an enum.")
-        }
-    };
-    quote! {#base}.into()
-}
-
-struct BaseVec {
-    name: Ident,
-    table_name: Ident,
-    filter_name: Ident,
-    single_row_name: Ident,
-    visibility: Visibility,
-    members: Vec<Member>,
-    on_conflict: proc_macro2::TokenStream,
-}
-
-impl std::fmt::Debug for BaseVec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BaseVec")
-            .field("name", &self.name)
-            .field("table_name", &self.table_name)
-            .field("filter_name", &self.filter_name)
-            .field("single_row_name", &self.single_row_name)
-            .field("members", &self.members)
-            .finish()
-    }
-}
-impl BaseVec {
-    fn from_struct(
-        attrs: Vec<syn::Attribute>,
-        name: Ident,
-        visibility: Visibility,
-        data_struct: syn::DataStruct,
-    ) -> Self {
-        let attribute_struct_data = AttributeStructData::parse(&attrs);
-        let on_conflict = attribute_struct_data.on_conflict();
-        let table_name = format_ident!("{name}Table");
-        let filter_name = format_ident!("{name}Filter");
-        let single_row_name = format_ident!("{name}SingleRow");
-        let members = Member::from_struct_fields::<true>(name.clone(), data_struct.fields);
-        if !members.iter().any(|m| m.is_primary) {
-            panic!("Vector Tables need to have a primary key! Use attribute #[silo(primary)]");
-        }
-        // Add Partial types for Migration here!
-        Self {
-            name,
-            table_name,
-            filter_name,
-            single_row_name,
-            visibility,
-            members,
-            on_conflict,
-        }
-    }
-
-    fn create_table(&self) -> proc_macro2::TokenStream {
-        let BaseVec {
-            name,
-            table_name,
-            filter_name,
-            members,
-            visibility,
-            on_conflict,
-            ..
-        } = self;
-        quote! {
-        #visibility struct #table_name<'a> {
-            connection: &'a silo::rusqlite::Connection,
-            string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>,
-        }
-
-        impl<'a> silo::SqlVecTable<'a> for #table_name<'a> {
-            const INSERT_FAILURE_BEHAVIOR: silo::SqlFailureBehavior = #on_conflict;
-
-            type GroupedRowType = #name;
-
-            fn insert(&self, row: Self::GroupedRowType) -> Result<(), silo::rusqlite::Error> {
-                use silo::AsRepeatedParams;
-                let columns = Self::GroupedRowType::COLUMNS.into_iter().map(|c| c.name).fold(
-                    String::new(),
-                    |mut acc, cur| {
-                        if acc.is_empty() {
-                            format!("\"{cur}\"")
-                        } else {
-                            acc.push_str(", ");
-                            acc.push('"');
-                            acc.push_str(cur);
-                            acc.push('"');
-                            acc
-                        }
-                    },
-                );
-                let values = (0..Self::GroupedRowType::COLUMNS.len()).map(|v| v + 1).fold(
-                    String::new(),
-                    |mut acc, cur| {
-                        if acc.is_empty() {
-                            format!("?{cur}")
-                        } else {
-                            acc.push_str(", ?");
-                            acc.push_str(&cur.to_string());
-                            acc
-                        }
-                    },
-                );
-
-                let sql = format!(
-                        "INSERT OR {} INTO {} ({columns}) VALUES ({values})",
-                        Self::INSERT_FAILURE_BEHAVIOR.to_string(),
-                        Self::GroupedRowType::NAME,
-                    );
-
-                for entry in &row.as_params() {
-                    self.connection.execute(
-                        &sql,
-                        entry.as_slice(),
-                    )?;
-                }
-                Ok(())
-            }
-
-            fn filter(&self, filter: #filter_name) -> Result<Vec<#name>, silo::rusqlite::Error> {
-                use silo::IntoGenericFilter;
-                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-                silo::query_vec_table_filtered::<Self::GroupedRowType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic)
-            }
-
-            fn delete(&self, filter: #filter_name) -> Result<usize, silo::rusqlite::Error> {
-                use silo::IntoGenericFilter;
-                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-                silo::delete_vec_table_filtered::<Self::GroupedRowType>(&self.connection, generic)
-            }
-
-            fn from_connection(connection: &'a silo::rusqlite::Connection, string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>) -> Self {
-                Self { connection, string_storage }
-            }
-        }
-        }
-    }
-
-    fn create_filter(&self) -> proc_macro2::TokenStream {
-        self.create_filter_struct()
-    }
-
-    fn create_filter_struct(&self) -> proc_macro2::TokenStream {
-        let BaseVec {
-            name,
-            filter_name,
-            visibility,
-            members,
-            ..
-        } = self;
-
-        let filter_field_names: Vec<_> = members
-            .iter()
-            .filter(|m| !m.is_skipped)
-            .map(|m| m.create_field_name())
-            .collect();
-
-        let filter_fields: Vec<_> = members
-            .iter()
-            .filter(|m| !m.is_skipped)
-            .map(|m| m.create_filter_field())
-            .collect();
-
-        let has_filter_fields: Vec<_> = members
-            .iter()
-            .filter(|m| !m.is_skipped)
-            .map(|m| m.create_has_filter_field())
-            .collect();
-
-        quote! {
-            #[derive(Default, Clone, Debug)]
-            #visibility struct #filter_name {
-                #(#filter_fields,)*
-            }
-
-            impl #filter_name {
-                #(
-                    #visibility fn #has_filter_fields {
-                        use silo::Filterable;
-                        self.#filter_field_names = expected.must_be_equal();
-                        self
-                    }
-                )*
-            }
-
-            impl silo::Filterable for #name {
-                type Filtered = #filter_name;
-
-                fn must_be_equal(self) -> Self::Filtered {
-                    let mut result = #filter_name::default();
-                    #(result.#filter_field_names = self.#filter_field_names.must_be_equal();)*
-                    result
-                }
-
-                fn must_contain(self) -> Self::Filtered {
-                    let mut result = #filter_name::default();
-                    #(result.#filter_field_names = self.#filter_field_names.must_contain();)*
-                    result
-                }
-            }
-
-            impl silo::IntoGenericFilter for #filter_name {
-                fn into_generic(self, string_storage: &mut silo::StaticStringStorage, column_name: Option<&'static str>) -> silo::GenericFilter {
-                    let mut columns = std::collections::HashMap::new();
-                    #(
-                        let actual_column_name = column_name.map(|c|
-                            string_storage.store(&[c, "_", stringify!(#filter_field_names)])).unwrap_or(stringify!(#filter_field_names));
-                        silo::GenericFilter::insert_into_columns(actual_column_name, &mut columns, self.#filter_field_names, string_storage);
-                    )*
-                    silo::GenericFilter { columns }
-                }
-            }
-
-            impl silo::IntoSqlColumnFilter for #filter_name {
-                fn into_sql_column_filter(
-                    self,
-                    name: &'static str,
-                    string_storage: &mut silo::StaticStringStorage,
-                ) -> Vec<(&'static str, silo::SqlColumnFilter<silo::SqlValue>)> {
-                    use silo::IntoSqlColumnFilter;
-                    let mut result = Vec::new();
-                    #(
-                        let column_name = string_storage.store(&[name, "_", stringify!(#filter_field_names)]);
-                        result.extend(self.#filter_field_names.into_sql_column_filter(column_name, string_storage));
-                    )*
-                    result
-                }
-            }
-        }
-    }
-
-    fn create_conversions(&self) -> proc_macro2::TokenStream {
-        self.create_conversions_struct()
-    }
-
-    fn create_conversions_struct(&self) -> proc_macro2::TokenStream {
-        let BaseVec {
-            name,
-            table_name,
-            filter_name,
-            members,
-            single_row_name,
-            visibility,
-            ..
-        } = self;
-        let field_names_with_skips: Vec<_> = members
-            .iter()
-            .filter(|m| !m.is_skipped)
-            .map(|c| c.create_field_name())
-            .collect();
-        let skipped_field_names: Vec<_> = members
-            .iter()
-            .filter(|m| m.is_skipped)
-            .map(|c| c.create_field_name())
-            .collect();
-        let field_types_with_skips: Vec<_> = members
-            .iter()
-            .filter(|m| !m.is_skipped)
-            .map(|c| c.create_field_type())
-            .collect();
-        let field_names_without_skips: Vec<_> =
-            members.iter().map(|c| c.create_field_name()).collect();
-        let columns: Vec<_> = members
-            .iter()
-            .filter(|m| !m.is_skipped)
-            .map(|m| m.create_column_definition())
-            .collect();
-        let columns_in_macro: Vec<_> = members
-            .iter()
-            .filter(|m| !m.is_skipped)
-            .map(|m| m.create_column_definition_in_macro())
-            .collect();
-        let create_prefixed_columns_macro = format_ident!("column_names_with_prefix_for_{name}");
-        let primary = members
-            .iter()
-            .find(|m| m.is_primary)
-            .expect("Needs to have attribute #[silo(primary)]");
-        let primary_name = &primary.name;
-        let primary = {
-            let name = &primary.name;
-            quote! {
-                let #name = rows.get(0)?.#name;
-            }
-        };
-        let remaining_names: Vec<_> = members
-            .iter()
-            .filter(|m| !m.is_primary && !m.is_skipped)
-            .map(|m| &m.name)
-            .collect();
-        let remaining_types: Vec<_> = members
-            .iter()
-            .filter(|m| !m.is_primary && !m.is_skipped)
-            .map(|m| &m.type_)
-            .collect();
-        let single_field_names: Vec<_> = members.iter().map(|m| m.create_field_name()).collect();
-        let single_field_types: Vec<_> = members
-            .iter()
-            .map(|m| m.create_single_field_type())
-            .collect();
-
-        quote! {
-            #visibility struct #single_row_name {
-                #(#single_field_names: #single_field_types,)*
-            }
-
-            impl silo::FromRow for #single_row_name {
-                fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
-                    #(
-                        let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#single_field_names)])).unwrap_or(stringify!(#single_field_names));
-                        let #single_field_names = <#single_field_types>::try_from_row(string_storage, Some(actual_column_name), row)?;)*
-                    Some(Self {
-                        #(#single_field_names,)*
-                    })
-                }
-            }
-
-            impl silo::FromRowWithPrimary for #single_row_name {
-                fn primary(&self) -> usize {
-                    self.#primary_name
-                }
-            }
-
-            impl silo::FromGroupedRows for #name {
-                type RowType = #single_row_name;
-                fn try_from_rows(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, rows: Vec<#single_row_name>) -> Option<Self> {
-                    use silo::rusqlite::OptionalExtension;
-                    #primary
-                    #(
-                        let mut #remaining_names = <#remaining_types>::default();
-                    )*
-                    for row in rows {
-                        #(
-                            #remaining_names.push(row.#remaining_names);
-                        )*
-                    }
-                    #(let #skipped_field_names = Default::default();)*
-                    Some(Self {#( #field_names_without_skips),*})
-                }
-            }
-
-            impl silo::AsRepeatedParams for #name {
-                const PARAM_COUNT: usize = #(<#field_types_with_skips as silo::AsRepeatedParams>::PARAM_COUNT +)* 0;
-                fn as_params(&self) -> Vec<Vec<&dyn silo::rusqlite::ToSql>> {
-                    use silo::AsRepeatedParams;
-                    let mut result = Vec::new();
-                    #(
-                        let values = <#field_types_with_skips as silo::AsRepeatedParams>::as_params(&self.#field_names_with_skips);
-                        // dbg!(&self.#field_names_with_skips, values.len());
-                        result.extend(values));*
-                    ;
-                    result
-                }
-            }
-
-            impl<'a> silo::IntoSqlVecTable<'a> for #name {
-                type Filter = #filter_name;
-                type Table = #table_name<'a>;
-                const COLUMNS: &'static [silo::SqlColumn] = &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
-                    #(#columns,)*
-                ]};
-
-                const NAME: &'static str = stringify!(#table_name);
-            }
-
-            #[allow(unused_macros)]
-            macro_rules! #create_prefixed_columns_macro {
-                ($prefix:expr) => {
-                    silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
-                    #(#columns_in_macro,)*
-                ]}
-            };
-            }
-        }
-    }
-}
-
-impl ToTokens for BaseVec {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let filter = self.create_filter();
-        tokens.extend(filter);
-        let table = self.create_table();
-        tokens.extend(table);
-        let conversions = self.create_conversions();
-        tokens.extend(conversions);
-    }
-}
-
-// #[macro_export]
-#[proc_macro_derive(IntoSqlVecTable, attributes(silo))]
-pub fn derive_into_sql_vec_table(input: TokenStream) -> TokenStream {
-    // syn::Data
-    let input: syn::DeriveInput = syn::parse(input)
-        .expect("This is a derive macro and should be used with structs or enums.");
-
-    let base = match input.data {
-        syn::Data::Struct(data_struct) => {
-            BaseVec::from_struct(input.attrs, input.ident, input.vis, data_struct)
-        }
-        syn::Data::Enum(data_enum) => {
-            panic!(
-                "The right behavior of an enum is not obvious here. Either use IntoSqlTable or derive this on a struct instead."
-            )
         }
         syn::Data::Union(_) => {
             panic!("Unions need a clear representation, either use a struct or an enum.")
