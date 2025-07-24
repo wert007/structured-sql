@@ -1358,7 +1358,9 @@ impl SqlValue {
             SqlValue::Float(it) => it.to_string(),
             SqlValue::Integer(it) => it.to_string(),
             SqlValue::Null => "NULL".to_string(),
-            SqlValue::Text(it) => format!("{it:?}"),
+            SqlValue::Text(it) => {
+                format!("'{}'", it.replace('\'', "''"))
+            }
             SqlValue::Blob(_items) => todo!(),
         }
     }
