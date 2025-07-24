@@ -907,7 +907,7 @@ impl Base {
                 type Filtered = #filter_name;
 
                 fn must_be_equal(&self) -> Self::Filtered {
-                    let mut string_storage = StaticStringStorage::new();
+                    let mut string_storage = silo::StaticStringStorage::new();
                     if let Some((column, value)) = self.as_primary_key(&mut string_storage, None) {
                         Default::default()
                     } else {
@@ -1223,7 +1223,7 @@ impl Base {
                 }
 
                 fn as_primary_key(&self,
-                    string_storage: &mut StaticStringStorage,
+                    string_storage: &mut silo::StaticStringStorage,
                     column_name: Option<&'static str>,
                 ) -> Option<(&'static str, u64)> {
                     None
@@ -1283,7 +1283,7 @@ impl Base {
                 }
 
                 fn as_primary_key(&self,
-                    string_storage: &mut StaticStringStorage,
+                    string_storage: &mut silo::StaticStringStorage,
                     column_name: Option<&'static str>,
                 ) -> Option<(&'static str, u64)> {
                     #as_primary_key_implementation
@@ -1461,7 +1461,7 @@ impl Base {
                     result
                 }
 
-                fn as_primary_key(&self,     _string_storage: &mut StaticStringStorage,
+                fn as_primary_key(&self,     _string_storage: &mut silo::StaticStringStorage,
                     _column_name: Option<&'static str>,
                 ) -> Option<(&'static str, u64)> {
                     None
