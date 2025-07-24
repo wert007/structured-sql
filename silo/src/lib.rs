@@ -1132,8 +1132,8 @@ impl SqlColumnFilter<SqlValue> {
                 if string_representation.starts_with('\'') && string_representation.ends_with('\'')
                 {
                     format!(
-                        " LIKE \"%{}%\"",
-                        &string_representation[1..string_representation.len() - 2]
+                        " LIKE '%{}%'",
+                        &string_representation[1..string_representation.len() - 1]
                     )
                 } else {
                     // Fallback to must be equal
