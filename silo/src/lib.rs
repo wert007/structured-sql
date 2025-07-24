@@ -1461,7 +1461,7 @@ where
     let columns_set = columns
         .into_iter()
         .enumerate()
-        .map(|(i, c)| format!("{c} = ?{i}"))
+        .map(|(i, c)| format!("{c} = ?{}", i + 1))
         .fold(String::new(), |mut acc, cur| {
             if acc.is_empty() {
                 cur
