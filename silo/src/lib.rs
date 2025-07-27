@@ -38,8 +38,8 @@ mod test {
 
     use crate::{
         AsParams, Database, Filterable, FromRow, GenericFilter, HasPartialRepresentation, HasValue,
-        IntoGenericFilter, IntoSqlTable, MigrationHandler, PartialType, SqlColumn, SqlColumnFilter,
-        SqlColumnType, SqlTable, StaticStringStorage, ToRows, handle_migration,
+        IntoGenericFilter, IntoSqlTable, MigrationHandler, PartialType, RowType, SqlColumn,
+        SqlColumnFilter, SqlColumnType, SqlTable, StaticStringStorage, ToRows, handle_migration,
     };
 
     #[derive(Debug, PartialEq)]
@@ -179,6 +179,8 @@ mod test {
         }
     }
 
+    impl RowType for Coord {}
+
     impl<'a> IntoSqlTable<'a> for Coord {
         type Table = CoordTable<'a>;
         const COLUMNS: &'static [crate::SqlColumn] = &[
@@ -206,6 +208,7 @@ mod test {
 
     impl<'a> SqlTable<'a> for CoordTable<'a> {
         type RowType = Coord;
+        type ValueType = Coord;
 
         fn insert(&self, row: impl ToRows<Self::RowType>) -> Result<(), rusqlite::Error> {
             let columns = Self::RowType::COLUMNS.into_iter().map(|c| c.name).fold(
@@ -245,7 +248,7 @@ mod test {
 
         fn filter(&self, filter: CoordFilter) -> Result<Vec<Coord>, rusqlite::Error> {
             let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-            crate::query_table_filtered::<Self::RowType>(
+            crate::query_table_filtered::<Self::RowType, Self::ValueType>(
                 &self.connection,
                 &mut self.string_storage.lock().unwrap(),
                 generic,
@@ -288,7 +291,7 @@ mod test {
     }
 }
 
-pub fn handle_migration<T: for<'a> IntoSqlTable<'a> + MigrationHandler>(
+pub fn handle_migration<T: for<'a> IntoSqlTable<'a> + MigrationHandler + RowType>(
     connection: &rusqlite::Connection,
     string_storage: &mut StaticStringStorage,
     actual_columns: &[SqlColumn],
@@ -1003,15 +1006,31 @@ impl<T: FromRow> FromGroupedRows for Vec<T> {
     type RowType = T;
 }
 
-pub trait IntoSqlTable<'a>: FromRow + AsParams + HasPartialRepresentation + Filterable {
+pub trait RowType: FromRow + AsParams + HasPartialRepresentation + Filterable {}
+
+impl<T: RowType> FromRowType<Self> for T {
+    fn from_row_type(value: Vec<Self>) -> Vec<Self> {
+        value
+    }
+}
+
+pub trait FromRowType<T: RowType>: MustBeEqual<T::Filtered> + Sized {
+    fn from_row_type(value: Vec<T>) -> Vec<Self>;
+}
+
+pub trait MustBeEqual<T: IntoGenericFilter> {
+    fn must_be_equal(&self) -> T;
+}
+
+pub trait IntoSqlTable<'a> {
     const COLUMNS: &'static [SqlColumn];
     const NAME: &'static str;
     type Table: SqlTable<'a>;
 }
 
 impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T>
-where
-    Option<<T as HasPartialRepresentation>::Partial>: From<Option<T>>,
+// where
+//     Option<<T as HasPartialRepresentation>::Partial>: From<Option<T>>,
 {
     const COLUMNS: &'static [SqlColumn] = T::COLUMNS;
 
@@ -1053,7 +1072,8 @@ impl<T> ToRows<T> for Vec<T> {
 }
 
 pub trait SqlTable<'a> {
-    type RowType: IntoSqlTable<'a>;
+    type RowType: RowType;
+    type ValueType: FromRowType<Self::RowType>;
     const INSERT_FAILURE_BEHAVIOR: SqlFailureBehavior;
     fn from_connection(
         connection: &'a Connection,
@@ -1062,7 +1082,7 @@ pub trait SqlTable<'a> {
     fn filter(
         &self,
         filter: <Self::RowType as Filterable>::Filtered,
-    ) -> Result<Vec<Self::RowType>, rusqlite::Error>;
+    ) -> Result<Vec<Self::ValueType>, rusqlite::Error>;
     fn delete(
         &self,
         filter: <Self::RowType as Filterable>::Filtered,
@@ -1083,8 +1103,8 @@ pub trait SqlTable<'a> {
     fn migrate(&self, actual_columns: &[SqlColumn]) -> Result<(), rusqlite::Error>;
     fn drain(
         &self,
-        mut callback: impl FnMut(&Self::RowType) -> bool,
-    ) -> Result<Vec<Self::RowType>, rusqlite::Error> {
+        mut callback: impl FnMut(&Self::ValueType) -> bool,
+    ) -> Result<Vec<Self::ValueType>, rusqlite::Error> {
         Ok(self
             .filter(Default::default())?
             .into_iter()
@@ -1172,6 +1192,12 @@ pub trait Filterable {
 
     fn must_be_equal(&self) -> Self::Filtered;
     fn must_contain(&self) -> Self::Filtered;
+}
+
+impl<F: Filterable> MustBeEqual<F::Filtered> for F {
+    fn must_be_equal(&self) -> F::Filtered {
+        self.must_be_equal()
+    }
 }
 
 impl<T: IntoGenericFilter + Default + Clone> Filterable for T {
@@ -1419,16 +1445,6 @@ impl SqlColumnType {
     }
 }
 
-pub trait Convert<T> {
-    fn convert() -> SqlColumnType;
-}
-
-impl Convert<f64> for SqlColumnType {
-    fn convert() -> SqlColumnType {
-        SqlColumnType::Float
-    }
-}
-
 pub trait PartialRow {
     fn used_column_names(&self, column_name: Option<String>) -> Vec<String>;
     fn used_values(&self) -> Vec<&dyn rusqlite::ToSql>;
@@ -1452,7 +1468,7 @@ impl<T: AsParams> PartialRow for Option<T> {
     }
 }
 
-pub fn update_rows<'a, T: IntoSqlTable<'a>>(
+pub fn update_rows<'a, T: IntoSqlTable<'a> + RowType>(
     connection: &&'a rusqlite::Connection,
     filter: GenericFilter,
     value: T::Partial,
@@ -1500,11 +1516,11 @@ where
     Ok(())
 }
 
-pub fn query_table_filtered<'a, T: IntoSqlTable<'a>>(
+pub fn query_table_filtered<'a, T: IntoSqlTable<'a> + RowType, U: FromRowType<T>>(
     connection: &&'a rusqlite::Connection,
     string_storage: &mut StaticStringStorage,
     filter: GenericFilter,
-) -> Result<Vec<T>, rusqlite::Error> {
+) -> Result<Vec<U>, rusqlite::Error> {
     let columns = T::COLUMNS
         .into_iter()
         .map(|c| c.name)
@@ -1523,17 +1539,19 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a>>(
     #[cfg(feature = "debug_sql")]
     dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
-    Ok(statement
-        .query_map(filter.get_params(), |row| {
-            Ok(
-                T::try_from_row(string_storage, None, row).unwrap_or_else(|| {
-                    #[cfg(feature = "debug_sql")]
-                    dbg!(row);
-                    panic!("Failed constructing value from row")
-                }),
-            )
-        })?
-        .collect::<Result<_, _>>()?)
+    Ok(FromRowType::from_row_type(
+        statement
+            .query_map(filter.get_params(), |row| {
+                Ok(
+                    T::try_from_row(string_storage, None, row).unwrap_or_else(|| {
+                        #[cfg(feature = "debug_sql")]
+                        dbg!(row);
+                        panic!("Failed constructing value from row")
+                    }),
+                )
+            })?
+            .collect::<Result<Vec<T>, _>>()?,
+    ))
 }
 
 pub fn delete_table_filtered<'a, T: IntoSqlTable<'a>>(

@@ -178,14 +178,25 @@ pub struct MovieWithRatings {
 #[derive(Debug, IntoSqlTable)]
 struct FooWithVec {
     #[silo(primary)]
-    iddasda: usize,
-    values: Vec<String>,
-    values2: Vec<String>,
-    values3: Vec<String>,
+    the_id: usize,
+    values_todo_keywords: Vec<String>,
 }
 
 fn main() {
     dbg!(Test::COLUMNS);
+    let test_db = Database::create_in_memory().unwrap();
+    let foo_with_vec = test_db.load::<FooWithVec>().unwrap();
+    foo_with_vec
+        .insert(FooWithVec {
+            the_id: 31,
+            values_todo_keywords: vec!["hello".into(), "world".into(), "test".into()],
+        })
+        .unwrap();
+    test_db.save("table-with-vecs.db").unwrap();
+    let result: Vec<FooWithVec> = foo_with_vec
+        .filter(FooWithVecRowTypeFilter::default().has_the_id(31))
+        .unwrap();
+    dbg!(result);
     let test_db = Database::open("test-before.db").unwrap();
     test_db.check::<Test>().unwrap();
     let test = test_db.load::<Test>().unwrap();
