@@ -226,7 +226,7 @@ fn main() {
         // }),
         ..Default::default()
     };
-    _ = dbg!(test.filter(f));
+    // _ = dbg!(test.filter(f));
     test_db.save("test.db").unwrap();
 
     // crashtest::crash_test();

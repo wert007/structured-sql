@@ -1028,7 +1028,7 @@ impl Base {
             filter_name,
             ..
         } = self;
-        let field_names_with_skips: Vec<_> = members
+        let mut field_names_with_skips: Vec<_> = members
             .iter()
             .filter(|m| !m.is_skipped)
             .map(|c| c.create_field_name())
@@ -1038,26 +1038,26 @@ impl Base {
             .filter(|m| m.is_skipped)
             .map(|c| c.create_field_name())
             .collect();
-        let field_types_with_skips: Vec<_> = members
+        let mut field_types_with_skips: Vec<_> = members
             .iter()
             .filter(|m| !m.is_skipped)
             .map(|c| c.create_field_type())
             .collect();
-        let field_names_without_skips: Vec<_> =
+        let mut field_names_without_skips: Vec<_> =
             members.iter().map(|c| c.create_field_name()).collect();
-        let columns: Vec<_> = members
+        let mut columns: Vec<_> = members
             .iter()
             .filter(|m| !m.is_skipped)
             .map(|m| m.create_column_definition(*has_vec_as_member))
             .collect();
-        let columns_in_macro: Vec<_> = members
+        let mut columns_in_macro: Vec<_> = members
             .iter()
             .filter(|m| !m.is_skipped)
             .map(|m| m.create_column_definition_in_macro(*has_vec_as_member))
             .collect();
         let create_prefixed_columns_macro =
             format_ident!("column_names_with_prefix_for_{row_type_name}");
-        let partial_field_definitions: Vec<_> = members
+        let mut partial_field_definitions: Vec<_> = members
             .iter()
             .filter(|m| !m.is_skipped)
             .map(|m| m.create_partial_field_definition())
@@ -1086,6 +1086,22 @@ impl Base {
         };
 
         let row_type_definition = if *has_vec_as_member {
+            field_names_with_skips.push(quote!(silo_order));
+            field_names_without_skips.push(quote!(silo_order));
+            field_types_with_skips.push(quote!(usize));
+            partial_field_definitions.push(quote!(silo_order: Option<usize>));
+            columns.push(quote!(&[silo::SqlColumn {
+                name: "silo_order",
+                r#type: <usize as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
+                is_unique: false,
+                is_primary: false,
+            }]));
+            columns_in_macro.push(quote!(&[silo::SqlColumn {
+                name: concat!($prefix,"_silo_order"),
+                r#type: <usize as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
+                is_unique: false,
+                is_primary: false,
+            }]));
             let row_type_fields = members.iter().filter(|m| !m.is_skipped).map(|m| {
                 let n = &m.name;
                 let t = m.create_field_type();
@@ -1134,6 +1150,7 @@ impl Base {
             let has_primary_key_field = format_ident!("has_{primary_key_field}");
             quote! {
                 struct #row_type_name {
+                    silo_order: usize,
                     #(#row_type_fields)*
                 }
 
@@ -1150,19 +1167,21 @@ impl Base {
                         }
                         let mut result = Vec::new();
                         let mut cur_key = values[0].#primary_key_field;
-                        let mut buffer = std::collections::VecDeque::new();
+                        let mut buffer = Vec::new();
                         while let Some(value) = values.pop() {
                             if cur_key == value.#primary_key_field {
-                                buffer.push_back(value);
+                                buffer.push(value);
                                 continue;
                             }
+                            buffer.sort_by_key(|x| x.silo_order);
                             result.push(#name {
                                 #primary_key_field: cur_key,
                                 #(#iterable_field_names: buffer.into_iter().map(|m|m.#iterable_field_names).collect(),)*
                             });
-                            buffer = std::collections::VecDeque::new();
+                            buffer = Vec::new();
                         }
                         if !buffer.is_empty() {
+                            buffer.sort_by_key(|x| x.silo_order);
                             result.push(#name {
                                 #primary_key_field: cur_key,
                                 #(#iterable_field_names: buffer.into_iter().map(|m|m.#iterable_field_names).collect(),)*
@@ -1176,8 +1195,9 @@ impl Base {
                 impl silo::ToRows<#row_type_name> for #name {
                     fn to_rows(self) -> Vec<#row_type_name> {
                         let mut result = Vec::new();
-                        for  #iterable_fields_as_pattern_match   in #iterable_fields_as_iterator {
+                        for  (silo_order, #iterable_fields_as_pattern_match) in #iterable_fields_as_iterator.enumerate() {
                             result.push(#row_type_name {
+                                silo_order,
                                 #(#cloneable_field_names: self.#cloneable_field_names.clone(),)*
                                 #(#iterable_field_names,)*
                             });
@@ -1199,188 +1219,24 @@ impl Base {
         } else {
             quote!()
         };
-        // let row_type = if *has_vec_as_member {
-        //     let row_type_name = format_ident!("{name}RowType");
-        //     let row_type_fields = members.iter().map(|m| {
-        //         let t = m.create_single_field_type();
-        //         let n = &m.name;
-        //         quote!(#n: #t,)
-        //     });
-        //     let partial_name = format_ident!("Partial{row_type_name}");
-        //     let partial_field_definitions = members.iter().filter(|m| !m.is_skipped).map(|m| {
-        //         let t = Member::try_strip_vec_and_option(&m.type_);
-        //         let n = &m.name;
-        //         quote!(#n: Option<#t>,)
-        //     });
-        //     let field_types_with_skips: Vec<_> = members
-        //         .iter()
-        //         .filter(|m| !m.is_skipped)
-        //         .map(|c| c.create_single_field_type())
-        //         .collect();
-        //     let iterable_field_names: Vec<_> = members
-        //         .iter()
-        //         .filter(|m| !m.is_skipped && m.has_vec())
-        //         .map(|m| m.create_field_name())
-        //         .collect();
-        //     let cloneable_field_names: Vec<_> = members
-        //         .iter()
-        //         .filter(|m| !m.is_skipped && !m.has_vec())
-        //         .map(|m| m.create_field_name())
-        //         .collect();
 
-        //     let iterable_fields_as_iterator = members
-        //         .iter()
-        //         .filter(|m| !m.is_skipped && m.has_vec())
-        //         .fold(proc_macro2::TokenStream::new(), |acc, cur| {
-        //             let name = cur.create_field_name();
-        //             if acc.is_empty() {
-        //                 quote!(self.#name.into_iter())
-        //             } else {
-        //                 quote!(#acc.zip(self.#name))
-        //             }
-        //         });
-        //     let iterable_fields_as_pattern_match = members
-        //         .iter()
-        //         .filter(|m| !m.is_skipped && m.has_vec())
-        //         .fold(proc_macro2::TokenStream::new(), |acc, cur| {
-        //             let name = cur.create_field_name();
-        //             if acc.is_empty() {
-        //                 quote!(#name)
-        //             } else {
-        //                 quote!((#acc, #name))
-        //             }
-        //         });
-
-        //     let columns: Vec<_> = members
-        //         .iter()
-        //         .filter(|m| !m.is_skipped)
-        //         .map(|m| m.create_single_column_definition())
-        //         .collect();
-
-        //     quote! {
-        //         struct #row_type_name {
-        //             #(#row_type_fields)*
-        //         }
-
-        //         impl silo::HasPartialRepresentation for #row_type_name {
-        //         type Partial = #partial_name;
-        //     }
-
-        //     #[derive(Default)]
-        //     #visibility struct #partial_name {
-        //         #(#partial_field_definitions)*
-        //     }
-
-        //         impl From<#row_type_name> for #partial_name {
-        //             fn from(value: #row_type_name) -> #partial_name {
-        //                 #partial_name {
-        //                     #(#field_names_with_skips: value.#field_names_with_skips.into(),)*
-        //                 }
-        //             }
-        //         }
-        //               impl silo::HasValue for #partial_name {
-        //                 fn has_values(&self) -> bool {
-        //                     #(self.#field_names_with_skips.has_values() ||)* false
-        //                 }
-        //               }
-
-        //     impl silo::PartialRow for #partial_name {
-        //         fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
-        //             use silo::HasValue;
-        //             let mut result = Vec::new();
-        //             #(if self.#field_names_with_skips.has_values() {
-        //                 result.append(&mut self.#field_names_with_skips.used_column_names(Some(column_name.as_ref().map(|c| format!("{c}_{}", stringify!(#field_names_with_skips))).unwrap_or_else(|| stringify!(#field_names_with_skips).to_string()))));
-        //             })*
-        //             result
-        //         }
-
-        //         fn used_values(&self) -> Vec<&dyn silo::rusqlite::ToSql> {
-
-        //             let mut result = Vec::new();
-        //             #(
-        //                 result.append(&mut self.#field_names_with_skips.used_values());
-        //             )*
-        //             result
-
-        //         }
-        //     }
-
-        //     impl silo::PartialType<#row_type_name> for #partial_name {
-        //         fn transpose(self) -> Option<#row_type_name> {
-        //             #(
-        //                 let #field_names_with_skips = self.#field_names_with_skips.transpose()?;
-        //             )*
-        //             #( let #skipped_field_names = Default::default();)*
-        //             Some(#row_type_name {
-        //                 #(#field_names_without_skips,)*
-        //             })
-        //         }
-        //     }
-
-        //     impl silo::ToRows<#row_type_name> for #row_type_name {
-        //         fn to_rows(self) -> Vec<#row_type_name> {
-        //             vec![self]
-        //         }
-        //     }
-
-        //     impl silo::ToRows<#row_type_name> for #name {
-        //         fn to_rows(self) -> Vec<#row_type_name> {
-        //             let mut result = Vec::new();
-        //             for  #iterable_fields_as_pattern_match   in #iterable_fields_as_iterator {
-        //                 result.push(#row_type_name {
-        //                     #(#cloneable_field_names: self.#cloneable_field_names.clone(),)*
-        //                     #(#iterable_field_names,)*
-        //                 });
-        //             }
-        //             result
-        //         }
-        //     }
-
-        //     impl silo::FromRow for #partial_name {
-        //         fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
-        //             use silo::rusqlite::OptionalExtension;
-        //             #(
-        //                 let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
-        //                 let #field_names_with_skips = <<#field_types_with_skips as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row)?;)*
-        //             Some(Self {#( #field_names_with_skips),*,..Default::default()})
-        //         }
-        //     }
-
-        //     impl silo::FromRow for #row_type_name {
-        //         fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row) -> Option<Self> {
-        //             <#partial_name>::try_from_row(string_storage, row_name, row)?.transpose()
-        //         }
-        //     }
-
-        //     impl silo::AsParams for #row_type_name {
-        //         const PARAM_COUNT: usize = #(<#field_types_with_skips as silo::AsParams>::PARAM_COUNT +)* 0;
-        //         fn as_params(&self) -> Vec<&dyn silo::rusqlite::ToSql> {
-        //             use silo::AsParams;
-        //             let mut result = Vec::new();
-        //             #(result.extend(&self.#field_names_with_skips.as_params()));*
-        //             ;
-        //             result
-        //         }
-
-        //         fn as_primary_key(&self,
-        //             string_storage: &mut silo::StaticStringStorage,
-        //             column_name: Option<&'static str>,
-        //         ) -> Option<(&'static str, u64)> {
-        //             None
-        //         }
-        //     }
-
-        //     impl<'a> silo::IntoSqlTable<'a> for #row_type_name {
-        //         type Table = #table_name<'a>;
-        //         const COLUMNS: &'static [silo::SqlColumn] = &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
-        //             #(#columns,)*
-        //         ]};
-
-        //         const NAME: &'static str = stringify!(#table_name);
-        //     }
-        //     }
+        // let optional_order_field_initializer = if *has_vec_as_member {
+        //     quote!(silo_order,)
         // } else {
-        //     quote! {}
+        //     quote!()
+        // };
+        // let optional_order_field_as_params = if *has_vec_as_member {
+        //     quote!(silo_order,)
+        // } else {
+        //     quote!()
+        // };
+        // let optional_order_field_from_row = if *has_vec_as_member {
+        //     quote!(
+        //         let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_silo_order"])).unwrap_or("silo_order");
+        //         let silo_order = <usize>::try_from_row(string_storage, Some(actual_column_name), row)?;
+        //     )
+        // } else {
+        //     quote!()
         // };
 
         quote! {
@@ -1397,7 +1253,8 @@ impl Base {
                     #(
                         let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
                         let #field_names_with_skips = <<#field_types_with_skips as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row)?;)*
-                    Some(Self {#( #field_names_with_skips),*, ..Default::default()})
+                    Some(Self {
+                        #( #field_names_with_skips),*, ..Default::default()})
                 }
             }
 
@@ -1410,7 +1267,8 @@ impl Base {
                         let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
                         let #field_names_with_skips = <#field_types_with_skips>::try_from_row(string_storage, Some(actual_column_name), row)?;)*
                     #(let #skipped_field_names = Default::default();)*
-                    Some(Self {#( #field_names_without_skips),*})
+                    Some(Self {
+                        #( #field_names_without_skips),*})
                 }
             }
 
