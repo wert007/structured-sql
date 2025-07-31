@@ -3,6 +3,10 @@ name = "test-structured-sql"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "standalone"
+path = "../tmp.rs"  # or whatever your single file is called
+
 [dependencies]
 chrono = "0.4.41"
 facet = "0.27.14"

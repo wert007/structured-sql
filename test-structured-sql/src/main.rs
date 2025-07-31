@@ -2,6 +2,8 @@ use silo::{
     AsParams, Database, IntoSqlTable, MigrationHandler, PartialType, SqlTable, StaticStringStorage,
 };
 
+extern crate alloc;
+extern crate core;
 // mod crashtest;
 
 #[derive(Debug, IntoSqlTable, Clone)]
@@ -30,7 +32,7 @@ enum FruitWithData {
     Banana { ripeness: String },
 }
 
-#[derive(Debug, IntoSqlTable)]
+#[derive(Debug, IntoSqlTable, Clone)]
 #[silo(migrate)]
 struct Test {
     #[silo(primary)]
@@ -47,10 +49,11 @@ impl MigrationHandler for Test {
     fn migrate(
         string_storage: &mut StaticStringStorage,
         mut partial: Self::Partial,
-        row: &rusqlite::Row,
+        row: &silo::rusqlite::Row,
+        connection: &silo::rusqlite::Connection,
     ) -> Option<Self> {
         use silo::FromRow;
-        let age = u32::try_from_row(string_storage, Some("age"), row).map(|v| v as f64);
+        let age = u32::try_from_row(string_storage, Some("age"), row, connection).map(|v| v as f64);
         partial.age.get_or_insert(age.unwrap_or(55.2));
         partial.transpose()
     }
@@ -113,7 +116,7 @@ pub struct Genre {
     name: String,
 }
 
-#[derive(Debug, PartialEq, IntoSqlTable)]
+#[derive(Debug, PartialEq, IntoSqlTable, Clone)]
 pub struct MovieWithGenres {
     movie_id: u32,
     genre_id: u16,
@@ -149,7 +152,8 @@ impl MigrationHandler for TmdbMovie {
     fn migrate(
         _string_storage: &mut StaticStringStorage,
         mut partial: Self::Partial,
-        _row: &rusqlite::Row,
+        _row: &silo::rusqlite::Row,
+        connection: &silo::rusqlite::Connection,
     ) -> Option<Self> {
         // if partial.release_date.is_none() {
         //     partial.release_date = Some(time::OffsetDateTime::now_utc());
@@ -175,26 +179,35 @@ pub struct MovieWithRatings {
 // const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
 // const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 
-#[derive(Debug, IntoSqlTable)]
+#[derive(Debug, IntoSqlTable, Clone)]
 struct FooWithVec {
     #[silo(primary)]
     the_id: usize,
     values_todo_keywords: Vec<String>,
 }
 
+#[derive(Debug, IntoSqlTable, Clone)]
+struct HasFooWithVecAsChild {
+    child: FooWithVec,
+    dummy_value: String,
+}
+
 fn main() {
     dbg!(Test::COLUMNS);
     let test_db = Database::create_in_memory().unwrap();
-    let foo_with_vec = test_db.load::<FooWithVec>().unwrap();
+    let foo_with_vec = test_db.load::<HasFooWithVecAsChild>().unwrap();
     foo_with_vec
-        .insert(FooWithVec {
-            the_id: 31,
-            values_todo_keywords: vec!["hello".into(), "world".into(), "test".into()],
+        .insert(HasFooWithVecAsChild {
+            child: FooWithVec {
+                the_id: 31,
+                values_todo_keywords: vec!["hello".into(), "world".into(), "test".into()],
+            },
+            dummy_value: "I just think they are neat!".into(),
         })
         .unwrap();
     test_db.save("table-with-vecs.db").unwrap();
-    let result: Vec<FooWithVec> = foo_with_vec
-        .filter(FooWithVecRowTypeFilter::default().has_the_id(31))
+    let result = foo_with_vec
+        .filter(HasFooWithVecAsChildFilter::default())
         .unwrap();
     dbg!(result);
     let test_db = Database::open("test-before.db").unwrap();
