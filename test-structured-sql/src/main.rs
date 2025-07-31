@@ -1,6 +1,4 @@
-use silo::{
-    AsParams, Database, IntoSqlTable, MigrationHandler, PartialType, SqlTable, StaticStringStorage,
-};
+use silo::{Database, IntoSqlTable, MigrationHandler, PartialType, SqlTable, StaticStringStorage};
 
 extern crate alloc;
 extern crate core;
@@ -151,9 +149,9 @@ pub struct TmdbMovie {
 impl MigrationHandler for TmdbMovie {
     fn migrate(
         _string_storage: &mut StaticStringStorage,
-        mut partial: Self::Partial,
+        partial: Self::Partial,
         _row: &silo::rusqlite::Row,
-        connection: &silo::rusqlite::Connection,
+        _connection: &silo::rusqlite::Connection,
     ) -> Option<Self> {
         // if partial.release_date.is_none() {
         //     partial.release_date = Some(time::OffsetDateTime::now_utc());
@@ -184,6 +182,7 @@ struct FooWithVec {
     #[silo(primary)]
     the_id: usize,
     values_todo_keywords: Vec<String>,
+    non_vec_field: String,
 }
 
 #[derive(Debug, IntoSqlTable, Clone)]
@@ -201,6 +200,7 @@ fn main() {
             child: FooWithVec {
                 the_id: 31,
                 values_todo_keywords: vec!["hello".into(), "world".into(), "test".into()],
+                non_vec_field: "Do not duplicate data needlessly".into(),
             },
             dummy_value: "I just think they are neat!".into(),
         })
@@ -212,24 +212,23 @@ fn main() {
     dbg!(result);
     let test_db = Database::open("test-before.db").unwrap();
     test_db.check::<Test>().unwrap();
-    let test = test_db.load::<Test>().unwrap();
     // test_db.save("test-before.db").unwrap();
 
-    test.insert(Test {
-        id: std::time::Instant::now().elapsed().as_nanos() as u32,
-        value1: Point { x: 12, y: 42 },
-        value2: "f32::EPSILON".into(),
-        value3: FruitWithData::Banana {
-            ripeness: "Very".into(),
-        },
-        age: f64::NAN,
-    })
-    .unwrap();
+    // test.insert(Test {
+    //     id: std::time::Instant::now().elapsed().as_nanos() as u32,
+    //     value1: Point { x: 12, y: 42 },
+    //     value2: "f32::EPSILON".into(),
+    //     value3: FruitWithData::Banana {
+    //         ripeness: "Very".into(),
+    //     },
+    //     age: f64::NAN,
+    // })
+    // .unwrap();
 
     // assert!(TmdbMovie::default().as_primary_key().is_some());
     // assert!(MovieWithRatings::default().as_primary_key().is_some());
 
-    let f = TestFilter {
+    TestFilter {
         value1: (PointFilter {
             x: silo::SqlColumnFilter::MustBeEqual(12),
             ..Default::default()
