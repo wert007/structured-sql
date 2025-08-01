@@ -604,6 +604,8 @@ enum TableAlteration {
 }
 
 fn compare_columns(actual: &[SqlColumn], expected: &[SqlColumn]) -> bool {
+    #[cfg(feature = "debug_sql")]
+    dbg!(actual, expected);
     fn find_by_name<'a>(columns: &'a [SqlColumn], name: &str) -> Option<&'a SqlColumn> {
         columns.iter().find(|c| c.name == name)
     }
