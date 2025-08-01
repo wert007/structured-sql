@@ -1212,7 +1212,7 @@ impl Base {
 
             let column_macro_name = format_ident!("column_names_with_prefix_for_{name}");
 
-            let partial = create_partial(
+            let partial = create_partial::<true>(
                 name,
                 &members
                     .iter()
@@ -1241,176 +1241,181 @@ impl Base {
             let partial_normal_name = format_ident!("Partial{name}");
 
             quote! {
-                    #partial
+                                #partial
 
-                    #[allow(unused_macros)]
-                    macro_rules! #column_macro_name {
-                        ($prefix:expr) => {
-                            [silo::SqlColumn {
-                                name: concat!($prefix, "_", stringify!(#primary_key_field)),
-                                r#type: <#primary_key_type as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE, is_unique: false, is_primary: false,
-                            }]
-                        }
-                    }
-
-                    #[derive(Clone, Debug)]
-                    struct #row_type_name {
-                        #(#row_type_fields)*
-                    }
-
-                    impl silo::Filterable for #name {
-                        type Filtered = #filter_name;
-                        fn must_be_equal(&self) -> #filter_name {
-                            <#filter_name as Default>::default().#has_primary_key_field(self.#primary_key_field)
-                        }
-
-                        fn must_contain(&self) -> #filter_name {
-                            <#filter_name as Default>::default()
-                        }
-                    }
-
-                    impl Into<Option<#primary_key_type>> for #name {
-                        fn into(self) -> <#primary_key_type as silo::HasPartialRepresentation>::Partial {
-                            self.#primary_key_field.into()
-                        }
-                    }
-
-                    impl silo::AsParams for #name {
-                        const PARAM_COUNT: usize = 1;
-
-                        fn as_params<'b>(&'b self) -> Vec<&'b dyn silo::rusqlite::ToSql> {
-                            self.#primary_key_field.as_params()
-                        }
-                    }
-
-                    impl silo::FromRow for #name {
-                    fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row,
-                    connection: &silo::rusqlite::Connection,
-                ) -> Option<Self> {
-                    use silo::SqlTable;
-                    let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
-                    let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection);
-                    let #primary_key_field = #primary_key_field??;
-                    let db = unsafe { silo::Database::from_connection(connection) }.ok()?;
-                    let table = db.load::<#name>().ok()?;
-
-                    let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field)).ok()?;
-                    elements.into_iter().next()
-                }
-            }
-                impl silo::FromRow for #partial_normal_name {
-                    fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row,
-                    connection: &silo::rusqlite::Connection,
-                ) -> Option<Self> {
-                    let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
-                    let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection)??;
-                    let db = unsafe { silo::Database::from_connection(connection) }.ok()?;
-                    let table = db.load::<#name>().ok()?;
-                    table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field)).ok()?.into_iter().next().map(Into::into)
-                }
-                    }
-
-                    impl silo::FromRowType<#row_type_name> for #name {
-                        fn from_row_type(mut values: Vec<#row_type_name>) -> Vec<#name> {
-                            if values.is_empty() {
-                                return Vec::new();
-                            }
-                            let mut result = Vec::new();
-                            let mut #cur_primary_key_field = values[0].#primary_key_field.clone();
-                            #(let mut #cur_remaining_fields = values[0].#remaining_fields.clone().expect("First value of a vec should be set!");)*
-                            #(let mut #cur_iterable_fields = Vec::new();)*
-                            while let Some(value) = values.pop() {
-                                if #cur_primary_key_field == value.#primary_key_field {
-                                    #(
-                                        if let Some(value) = value.#iterable_field_names {
-                                            #cur_iterable_fields.push(value);
-                                        })*
-                                    continue;
+                                #[allow(unused_macros)]
+                                macro_rules! #column_macro_name {
+                                    ($prefix:expr) => {
+                                        [silo::SqlColumn {
+                                            name: concat!($prefix, "_", stringify!(#primary_key_field)),
+                                            r#type: <#primary_key_type as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE, is_unique: false, is_primary: false,
+                                        }]
+                                    }
                                 }
-                                #(#cur_iterable_fields.reverse();)*
-                                result.push(#name {
-                                    #primary_key_field: #cur_primary_key_field,
-                                    #(#iterable_field_names: #cur_iterable_fields,)*
-                                    #(#remaining_fields: #cur_remaining_fields.clone(),)*
-                                });
-                                #cur_primary_key_field = value.#primary_key_field.clone();
-                                #(#cur_remaining_fields = value.#remaining_fields.clone().expect("First value of a vec should be set!");)*
-                                #(#cur_iterable_fields = Vec::new();)*
+
+                                #[derive(Clone, Debug)]
+                                struct #row_type_name {
+                                    #(#row_type_fields)*
+                                }
+
+                                impl silo::Filterable for #name {
+                                    type Filtered = #filter_name;
+                                    fn must_be_equal(&self) -> #filter_name {
+                                        <#filter_name as Default>::default().#has_primary_key_field(self.#primary_key_field)
+                                    }
+
+                                    fn must_contain(&self) -> #filter_name {
+                                        <#filter_name as Default>::default()
+                                    }
+                                }
+
+                                impl Into<Option<#primary_key_type>> for #name {
+                                    fn into(self) -> <#primary_key_type as silo::HasPartialRepresentation>::Partial {
+                                        self.#primary_key_field.into()
+                                    }
+                                }
+
+                                impl silo::AsParams for #name {
+                                    const PARAM_COUNT: usize = 1;
+
+                                    fn as_params<'b>(&'b self) -> Vec<&'b dyn silo::rusqlite::ToSql> {
+                                        self.#primary_key_field.as_params()
+                                    }
+                                }
+
+                                impl silo::FromRow for #name {
+                                fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row,
+                                connection: &silo::rusqlite::Connection,
+                            ) -> Option<Self> {
+                                use silo::SqlTable;
+                                let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
+                                let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection);
+                                let #primary_key_field = #primary_key_field??;
+                                let db = unsafe { silo::Database::from_connection(connection) }.ok()?;
+                                let table = db.load::<#name>().ok()?;
+
+                                let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field)).ok()?;
+                                elements.into_iter().next()
                             }
-                            if #(!#cur_iterable_fields.is_empty() ||)* false {
-                                #(#cur_iterable_fields.reverse();)*
-                                result.push(#name {
-                                    #primary_key_field: #cur_primary_key_field,
-                                    #(#iterable_field_names: #cur_iterable_fields,)*
-                                    #(#remaining_fields: #cur_remaining_fields.clone(),)*
-                                });
+                        }
 
+            impl silo::FromRow for #partial_normal_name {
+                            fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row,
+                            connection: &silo::rusqlite::Connection,
+                        ) -> Option<Self> {
+                     use silo::SqlTable;
+                                let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
+                                let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection);
+                                let #primary_key_field = #primary_key_field??;
+                                let db = unsafe { silo::Database::from_connection(connection) }.ok()?;
+                                let table = db.load::<#name>().ok()?;
+
+                                let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field)).ok()?;
+                                elements.into_iter().next().map(Into::into)
                             }
-                            result
-                        }
-                    }
+                           }
 
-                    impl silo::ToRows<#row_type_name> for #name {
-                        fn to_rows(self) -> Vec<#row_type_name> {
-                            let mut result = Vec::new();
-                            #(let mut #remaining_fields = Some(self.#remaining_fields);)*
-                            #(let #iterable_lens = self.#iterable_field_names.len();)*
-                            let len = #((#iterable_lens).max)*(0);
-                            for #iterable_fields_as_pattern_match in #iterable_fields_as_iterator.take(len) {
-                                result.push(#row_type_name {
-                                    #primary_key_field: self.#primary_key_field.clone(),
-                                    #(#remaining_fields: #remaining_fields.take(),)*
-                                    #(#iterable_field_names,)*
-                                    #(#iterable_remaining_names: #iterable_lens.saturating_sub(#iterable_remaining_names),)*
-                                });
+                                impl silo::FromRowType<#row_type_name> for #name {
+                                    fn from_row_type(mut values: Vec<#row_type_name>) -> Vec<#name> {
+                                        if values.is_empty() {
+                                            return Vec::new();
+                                        }
+                                        let mut result = Vec::new();
+                                        let mut #cur_primary_key_field = values[0].#primary_key_field.clone();
+                                        #(let mut #cur_remaining_fields = values[0].#remaining_fields.clone().expect("First value of a vec should be set!");)*
+                                        #(let mut #cur_iterable_fields = Vec::new();)*
+                                        while let Some(value) = values.pop() {
+                                            if #cur_primary_key_field == value.#primary_key_field {
+                                                #(
+                                                    if let Some(value) = value.#iterable_field_names {
+                                                        #cur_iterable_fields.push(value);
+                                                    })*
+                                                continue;
+                                            }
+                                            #(#cur_iterable_fields.reverse();)*
+                                            result.push(#name {
+                                                #primary_key_field: #cur_primary_key_field,
+                                                #(#iterable_field_names: #cur_iterable_fields,)*
+                                                #(#remaining_fields: #cur_remaining_fields.clone(),)*
+                                            });
+                                            #cur_primary_key_field = value.#primary_key_field.clone();
+                                            #(#cur_remaining_fields = value.#remaining_fields.clone().expect("First value of a vec should be set!");)*
+                                            #(#cur_iterable_fields = Vec::new();)*
+                                        }
+                                        if #(!#cur_iterable_fields.is_empty() ||)* false {
+                                            #(#cur_iterable_fields.reverse();)*
+                                            result.push(#name {
+                                                #primary_key_field: #cur_primary_key_field,
+                                                #(#iterable_field_names: #cur_iterable_fields,)*
+                                                #(#remaining_fields: #cur_remaining_fields.clone(),)*
+                                            });
+
+                                        }
+                                        result
+                                    }
+                                }
+
+                                impl silo::ToRows<#row_type_name> for #name {
+                                    fn to_rows(self) -> Vec<#row_type_name> {
+                                        let mut result = Vec::new();
+                                        #(let mut #remaining_fields = Some(self.#remaining_fields);)*
+                                        #(let #iterable_lens = self.#iterable_field_names.len();)*
+                                        let len = #((#iterable_lens).max)*(0);
+                                        for #iterable_fields_as_pattern_match in #iterable_fields_as_iterator.take(len) {
+                                            result.push(#row_type_name {
+                                                #primary_key_field: self.#primary_key_field.clone(),
+                                                #(#remaining_fields: #remaining_fields.take(),)*
+                                                #(#iterable_field_names,)*
+                                                #(#iterable_remaining_names: #iterable_lens.saturating_sub(#iterable_remaining_names),)*
+                                            });
+                                        }
+                                        result
+                                    }
+                                }
+
+
+                            impl<'a> silo::IntoSqlTable<'a> for #name {
+                                type Table = #table_name<'a>;
+                                const COLUMNS: &'static [silo::SqlColumn] = &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
+                                    #(#columns,)*
+                                ]};
+
+                                const NAME: &'static str = stringify!(#table_name);
                             }
-                            result
-                        }
-                    }
 
-
-                impl<'a> silo::IntoSqlTable<'a> for #name {
-                    type Table = #table_name<'a>;
-                    const COLUMNS: &'static [silo::SqlColumn] = &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
-                        #(#columns,)*
-                    ]};
-
-                    const NAME: &'static str = stringify!(#table_name);
-                }
-
-                impl silo::RowType for #row_type_name {
-                    fn insert_into_connected_foreign_tables(
-                        self,
-                        is_top_level: bool,
-                        connection: &silo::rusqlite::Connection,
-                    ) -> silo::rusqlite::Result<()> {
-                        use silo::SqlTable;
-                        if is_top_level {
-                            return Ok(())
-                        }
-                        let db = unsafe { silo::Database::from_connection(connection) }?;
-                        let table = db.load::<#name>()?;
-                        table.insert(self)?;
-                        Ok(())
-                    }
-                }
-                impl silo::RowType for #name {
-                    fn insert_into_connected_foreign_tables(
-                        self,
-                        is_top_level: bool,
-                        connection: &silo::rusqlite::Connection,
-                    ) -> silo::rusqlite::Result<()> {
-                        use silo::SqlTable;
-                        if is_top_level {
-                            return Ok(());
-                        }
-                        let db = unsafe { silo::Database::from_connection(connection) }?;
-                        let table = db.load::<#name>()?;
-                        table.insert(self)?;
-                        Ok(())
-                    }
-                }
-                }
+                            impl silo::RowType for #row_type_name {
+                                fn insert_into_connected_foreign_tables(
+                                    self,
+                                    is_top_level: bool,
+                                    connection: &silo::rusqlite::Connection,
+                                ) -> silo::rusqlite::Result<()> {
+                                    use silo::SqlTable;
+                                    if is_top_level {
+                                        return Ok(())
+                                    }
+                                    let db = unsafe { silo::Database::from_connection(connection) }?;
+                                    let table = db.load::<#name>()?;
+                                    table.insert(self)?;
+                                    Ok(())
+                                }
+                            }
+                            impl silo::RowType for #name {
+                                fn insert_into_connected_foreign_tables(
+                                    self,
+                                    is_top_level: bool,
+                                    connection: &silo::rusqlite::Connection,
+                                ) -> silo::rusqlite::Result<()> {
+                                    use silo::SqlTable;
+                                    if is_top_level {
+                                        return Ok(());
+                                    }
+                                    let db = unsafe { silo::Database::from_connection(connection) }?;
+                                    let table = db.load::<#name>()?;
+                                    table.insert(self)?;
+                                    Ok(())
+                                }
+                            }
+                            }
         } else {
             quote!(
                 impl silo::RowType for #row_type_name {
@@ -1428,7 +1433,7 @@ impl Base {
             )
         };
 
-        let partial = create_partial(
+        let partial = create_partial::<true>(
             row_type_name,
             &field_names,
             &field_types,
@@ -1446,22 +1451,6 @@ impl Base {
                      vec![self]
                  }
              }
-
-            impl silo::FromRow for #partial_name {
-                fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row,
-                connection: &silo::rusqlite::Connection,
-            ) -> Option<Self> {
-                use silo::rusqlite::OptionalExtension;
-                #(
-                    let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
-                    let #field_names_with_skips = <<#field_types as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection)?;
-                )*
-                Some(Self {
-                    #( #field_names_with_skips),*,
-                    ..Default::default()})
-            }
-        }
-
 
 
             impl silo::FromRow for #row_type_name {
@@ -1554,171 +1543,113 @@ impl Base {
         let create_prefixed_columns_macro =
             format_ident!("column_names_with_prefix_for_{row_type_name}");
 
+        let partial = create_partial::<false>(
+            row_type_name,
+            &[format_ident!("variant")],
+            &[syn::parse_quote!(String)],
+            &[],
+        );
+
         quote! {
-                 impl silo::HasPartialRepresentation for #row_type_name {
-                     type Partial = #partial_name;
-                 }
+            #partial
 
-                 #[derive(Default, Debug)]
-                 #visibility struct #partial_name {
-                     variant: Option<String>,
-                 }
+            impl silo::FromRow for #row_type_name {
+                fn try_from_row(string_storage: &mut silo::StaticStringStorage,
+                   row_name: Option<&'static str>,
+                   row: &silo::rusqlite::Row,
+                   connection: &silo::rusqlite::Connection,
+               ) -> Option<Self> {
+                    use silo::rusqlite::OptionalExtension;
+                    let variant_name = row_name.map(|r| string_storage.store(&[r, "_variant"])).unwrap_or("variant");
+                    let variant = String::try_from_row(string_storage, Some(variant_name), row, connection)?;
+                    #(
+                        let column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
+                        let #field_names_with_skips = <#field_types_with_skips>::try_from_row(string_storage, Some(column_name), row, connection);)*
+                    Some(match variant.as_str() {
+                        #(stringify!(#variants) => {
 
+                            #(let #variant_field_names = #variant_field_names?;)*
+                            Self::#variant_pattern
+                        })*
+                        _ => {return None;}
+                    })}
+            }
 
-
-                impl From<#row_type_name> for #partial_name {
-                    fn from(value: #row_type_name) -> #partial_name {
-                        #partial_name {
-                            variant: (*value.variant_name()).to_string().into(),
-                            }
+            impl #row_type_name {
+                #[allow(unused_variables)]
+                pub fn empty_columns_before(&self) -> usize {
+                    match self {
+                        #(Self::#variant_pattern => {
+                            #variant_empty_columns_before
+                        })*
                     }
                 }
 
-        impl silo::HasValue for #partial_name {
-                             fn has_values(&self) -> bool {
-                                 self.variant.has_values()
-                             }
-                           }
-
-                 impl silo::PartialRow for #partial_name {
-                     fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
-                         use silo::HasValue;
-                         let mut result = Vec::new();
-                         if self.variant.has_values() {
-                             result.append(&mut self.variant.used_column_names(Some(column_name.as_ref().map(|c| format!("{c}_variant")).unwrap_or_else(|| "variant".to_string()))));
-                         }
-                         result
-                     }
-
-
-                fn used_values(&self) -> Vec<&dyn silo::rusqlite::ToSql> {
-
-                    let mut result = Vec::new();
-                        result.append(&mut self.variant.used_values());
-                    result
-
+                #[allow(unused_variables)]
+                pub fn variant_name(&self) -> &'static &'static str {
+                    match self {
+                        #(Self::#variant_pattern => {
+                            &#variant_names
+                        })*
+                    }
                 }
-                 }
+            }
 
-                 impl silo::PartialType<#row_type_name> for #partial_name {
-                     fn transpose(self) -> Option<#row_type_name> {
-                         // TODO: Real support for partial enum values!
-                         None
-                     }
-                 }
+            impl silo::AsParams for #row_type_name {
+                const PARAM_COUNT: usize = #(<#field_types_with_skips as silo::AsParams>::PARAM_COUNT +)* 1;
+                fn as_params(&self) -> Vec<&dyn silo::rusqlite::ToSql> {
+                    use silo::AsParams;
+                    let mut result: Vec<&dyn silo::rusqlite::ToSql> = vec![&silo::rusqlite::types::Null; self.empty_columns_before()];
+                    result[0] = self.variant_name();
 
-                 impl silo::FromRow for #partial_name {
-                     fn try_from_row(string_storage: &mut silo::StaticStringStorage,
-                        row_name: Option<&'static str>,
-                     row: &silo::rusqlite::Row,
-                connection: &silo::rusqlite::Connection,
-                    ) -> Option<Self> {
-                         use silo::rusqlite::OptionalExtension;
-                         let variant = String::try_from_row(string_storage, Some("variant"), row, connection);
-                         Some(Self {
-                             variant,
-                         })
-                     }
-                 }
+                    match self {
+                        #(Self::#variant_pattern => {
+                            #(result.extend(#variant_field_names.as_params());)*
+                        })*
+                    }
+                    while result.len() < Self::PARAM_COUNT {
+                        result.push(&silo::rusqlite::types::Null);
+                    }
+                    result
+                }
+            }
 
+           impl silo::RowType for #row_type_name {}
 
-                 impl silo::FromRow for #row_type_name {
-                     fn try_from_row(string_storage: &mut silo::StaticStringStorage,
-                        row_name: Option<&'static str>,
-                        row: &silo::rusqlite::Row,
-                        connection: &silo::rusqlite::Connection,
-                    ) -> Option<Self> {
-                         use silo::rusqlite::OptionalExtension;
-                         let variant_name = row_name.map(|r| string_storage.store(&[r, "_variant"])).unwrap_or("variant");
-                         let variant = String::try_from_row(string_storage, Some(variant_name), row, connection)?;
-                         #(
-                             let column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
-                             let #field_names_with_skips = <#field_types_with_skips>::try_from_row(string_storage, Some(column_name), row, connection);)*
-                         Some(match variant.as_str() {
-                             #(stringify!(#variants) => {
+            impl<'a> silo::IntoSqlTable<'a> for #row_type_name {
+                type Table = #table_name<'a>;
+                const COLUMNS: &'static [silo::SqlColumn] = &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
+                    &[silo::SqlColumn {
+                        name: "variant",
+                        r#type: silo::SqlColumnType::OptionalText,
+                        is_primary: false,
+                        is_unique: false,
+                    }],
+                    #(#columns,)*
+                ]};
 
-                                 #(let #variant_field_names = #variant_field_names?;)*
-                                 Self::#variant_pattern
-                             })*
-                             _ => {return None;}
-                         })}
-                 }
+                const NAME: &'static str = stringify!(#table_name);
+            }
 
-                 impl #row_type_name {
-                     #[allow(unused_variables)]
-                     pub fn empty_columns_before(&self) -> usize {
-                         match self {
-                             #(Self::#variant_pattern => {
-                                 #variant_empty_columns_before
-                             })*
-                         }
-                     }
+            #migration_handler
 
-                     #[allow(unused_variables)]
-                     pub fn variant_name(&self) -> &'static &'static str {
-                         match self {
-                             #(Self::#variant_pattern => {
-                                 &#variant_names
-                             })*
-                         }
-                     }
-                 }
-
-                 impl silo::AsParams for #row_type_name {
-                     const PARAM_COUNT: usize = #(<#field_types_with_skips as silo::AsParams>::PARAM_COUNT +)* 1;
-                     fn as_params(&self) -> Vec<&dyn silo::rusqlite::ToSql> {
-                         use silo::AsParams;
-                         let mut result: Vec<&dyn silo::rusqlite::ToSql> = vec![&silo::rusqlite::types::Null; self.empty_columns_before()];
-                         result[0] = self.variant_name();
-
-                         match self {
-                             #(Self::#variant_pattern => {
-                                 #(result.extend(#variant_field_names.as_params());)*
-                             })*
-                         }
-                         while result.len() < Self::PARAM_COUNT {
-                             result.push(&silo::rusqlite::types::Null);
-                         }
-                         result
-                     }
-                 }
-
-                impl silo::RowType for #row_type_name {}
-
-                 impl<'a> silo::IntoSqlTable<'a> for #row_type_name {
-                     type Table = #table_name<'a>;
-                     const COLUMNS: &'static [silo::SqlColumn] = &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
-                         &[silo::SqlColumn {
-                             name: "variant",
-                             r#type: silo::SqlColumnType::OptionalText,
-                             is_primary: false,
-                             is_unique: false,
-                         }],
-                         #(#columns,)*
-                     ]};
-
-                     const NAME: &'static str = stringify!(#table_name);
-                 }
-
-                 #migration_handler
-
-                 #[allow(unused_macros)]
-                 macro_rules! #create_prefixed_columns_macro {
-                     ($prefix:expr) => {
-                         silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
-                             &[silo::SqlColumn {
-                             name: concat!($prefix, "_variant"),
-                             r#type: silo::SqlColumnType::Text,
-                             is_primary: false,
-                             is_unique: false,
-                         }],
-                         #(#columns_in_macro,)*
-                     ]}
+            #[allow(unused_macros)]
+            macro_rules! #create_prefixed_columns_macro {
+                ($prefix:expr) => {
+                    silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
+                        &[silo::SqlColumn {
+                        name: concat!($prefix, "_variant"),
+                        r#type: silo::SqlColumnType::Text,
+                        is_primary: false,
+                        is_unique: false,
+                    }],
+                    #(#columns_in_macro,)*
+                ]}
 
 
-                 };
-                 }
-             }
+            };
+            }
+        }
     }
 }
 
@@ -1737,7 +1668,7 @@ impl ToTokens for Base {
     }
 }
 
-fn create_partial(
+fn create_partial<const IS_STRUCT: bool>(
     name: &syn::Ident,
     field_names: &[syn::Ident],
     field_types: &[syn::Type],
@@ -1755,6 +1686,80 @@ fn create_partial(
             quote!(#n.into())
         }
     });
+
+    let from_impl = if IS_STRUCT {
+        quote! {
+            impl From<#name> for #partial_name {
+                fn from(value: #name) -> #partial_name {
+                    #partial_name {
+                        #(#field_names: value.#from_field_conversion,)*
+                    }
+                }
+            }
+        }
+    } else {
+        quote! {
+            impl From<#name> for #partial_name {
+                fn from(value: #name) -> #partial_name {
+                    let variant = *value.variant_name();
+                    #partial_name {
+                        variant: Some(variant.into()),
+                    }
+                }
+            }
+        }
+    };
+
+    let partial_type_impl = if IS_STRUCT {
+        quote! {
+            impl silo::PartialType<#name> for #partial_name {
+                fn transpose(self) -> Option<#name> {
+                    #(let #field_names = self.#field_names.transpose()?;)*
+                    #(let #unrepresented_fields = Default::default();)*
+                    Some(#name {
+                        #(#field_names,)*
+                        #(#unrepresented_fields,)*
+                    })
+                }
+            }
+        }
+    } else {
+        quote! {
+            impl silo::PartialType<#name> for #partial_name {
+                fn transpose(self) -> Option<#name> {
+                    let variant = self.variant?;
+                    // TODO: Select right variant here!
+                    None
+                }
+            }
+        }
+    };
+
+    let from_row_impl = if field_types.iter().any(|t| type_is_vec(t)) {
+        quote! {}
+    } else {
+        quote! {
+            impl silo::FromRow for #partial_name {
+            fn try_from_row(
+                string_storage: &mut silo::StaticStringStorage,
+                row_name: Option<&'static str>,
+                row: &silo::rusqlite::Row,
+                connection: &silo::rusqlite::Connection,
+            ) -> Option<Self> {
+                use silo::rusqlite::OptionalExtension;
+                #(
+                    let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names)])).unwrap_or(stringify!(#field_names));
+                    let #field_names = <<#field_types as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection)?;
+                )*
+                Some(Self {
+                    #( #field_names),*
+                })
+            }
+        }
+
+        }
+    };
+
     quote! {
         #[derive(Default, Debug)]
         pub struct #partial_name {
@@ -1765,13 +1770,9 @@ fn create_partial(
             type Partial = #partial_name;
         }
 
-        impl From<#name> for #partial_name {
-            fn from(value: #name) -> #partial_name {
-                #partial_name {
-                    #(#field_names: value.#from_field_conversion,)*
-                }
-            }
-        }
+        #from_impl
+        #partial_type_impl
+        #from_row_impl
 
         impl silo::HasValue for #partial_name {
             fn has_values(&self) -> bool {
@@ -1796,17 +1797,6 @@ fn create_partial(
                 let mut result = Vec::new();
                 #(result.append(&mut self.#field_names.used_values());)*
                 result
-            }
-        }
-
-        impl silo::PartialType<#name> for #partial_name {
-            fn transpose(self) -> Option<#name> {
-                #(let #field_names = self.#field_names.transpose()?;)*
-                #(let #unrepresented_fields = Default::default();)*
-                Some(#name {
-                    #(#field_names,)*
-                    #(#unrepresented_fields,)*
-                })
             }
         }
     }
