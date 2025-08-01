@@ -892,6 +892,21 @@ impl Base {
             .map(|m| m.create_contains_filter_field())
             .collect();
 
+        let must_be_equal_impl = if let Some(primary) = members.iter().find(|m| m.is_primary) {
+            let name = &primary.name;
+            quote! {
+                let mut result = #filter_name::default();
+                result.#name = self.#name.must_be_equal();
+                result
+            }
+        } else {
+            quote! {
+                let mut result = #filter_name::default();
+                #(result.#filter_field_names = self.#filter_field_names.must_be_equal();)*
+                result
+            }
+        };
+
         quote! {
             #[derive(Default, Clone, Debug)]
             #visibility struct #filter_name {
@@ -920,13 +935,7 @@ impl Base {
                 fn must_be_equal(&self) -> Self::Filtered {
                     use silo::AsParams;
                     let mut string_storage = silo::StaticStringStorage::new();
-                    if let Some((column, value)) = self.as_primary_key(&mut string_storage, None) {
-                        Default::default()
-                    } else {
-                        let mut result = #filter_name::default();
-                        #(result.#filter_field_names = self.#filter_field_names.must_be_equal();)*
-                        result
-                    }
+                    #must_be_equal_impl
                 }
                 fn must_contain(&self) -> Self::Filtered {
                     let mut result = #filter_name::default();
@@ -1078,28 +1087,6 @@ impl Base {
             .filter(|m| !m.is_skipped)
             .map(|m| m.create_partial_field_definition())
             .collect();
-
-        let as_primary_key_implementation = if let Some(primary) =
-            members.iter().find(|m| m.is_primary)
-        {
-            let member_name = &primary.name;
-            assert!(
-                !primary.name_is_generated,
-                "How could a generated field be a primary key?"
-            );
-            quote!(
-                let column_name = column_name.map(|c| string_storage.store(&[c, "_", stringify!(#member_name)])).unwrap_or(stringify!(#member_name));
-                Some((stringify!(#member_name), self.#member_name as u64))
-            )
-        } else {
-            quote!(
-                let result = None;
-                #(
-                    let c = column_name.map(|c| string_storage.store(&[c, "_", stringify!(#field_names_with_skips)])).unwrap_or(stringify!(#field_names_with_skips));
-                    let result = result.or(self.#field_names_with_skips.as_primary_key(string_storage, Some(c)));)*
-                result
-            )
-        };
 
         let mut field_names = members
             .iter()
@@ -1294,21 +1281,13 @@ impl Base {
                         fn as_params<'b>(&'b self) -> Vec<&'b dyn silo::rusqlite::ToSql> {
                             self.#primary_key_field.as_params()
                         }
-
-                        fn as_primary_key(
-                            &self,
-                            string_storage: &mut silo::StaticStringStorage,
-                            column_name: Option<&'static str>,
-                        ) -> Option<(&'static str, u64)> {
-                            let name = column_name.map(|c| string_storage.store(&[c, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
-                            Some((name, self.#primary_key_field as u64))
-                        }
                     }
 
                     impl silo::FromRow for #name {
                     fn try_from_row(string_storage: &mut silo::StaticStringStorage, row_name: Option<&'static str>, row: &silo::rusqlite::Row,
                     connection: &silo::rusqlite::Connection,
                 ) -> Option<Self> {
+                    use silo::SqlTable;
                     let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
                     let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection);
                     let #primary_key_field = #primary_key_field??;
@@ -1405,6 +1384,7 @@ impl Base {
                         is_top_level: bool,
                         connection: &silo::rusqlite::Connection,
                     ) -> silo::rusqlite::Result<()> {
+                        use silo::SqlTable;
                         if is_top_level {
                             return Ok(())
                         }
@@ -1420,6 +1400,7 @@ impl Base {
                         is_top_level: bool,
                         connection: &silo::rusqlite::Connection,
                     ) -> silo::rusqlite::Result<()> {
+                        use silo::SqlTable;
                         if is_top_level {
                             return Ok(());
                         }
@@ -1507,13 +1488,6 @@ impl Base {
                      #(result.extend(&self.#field_names_with_skips.as_params()));*
                      ;
                      result
-                 }
-
-                 fn as_primary_key(&self,
-                     string_storage: &mut silo::StaticStringStorage,
-                     column_name: Option<&'static str>,
-                 ) -> Option<(&'static str, u64)> {
-                     #as_primary_key_implementation
                  }
              }
 
@@ -1706,12 +1680,6 @@ impl Base {
                              result.push(&silo::rusqlite::types::Null);
                          }
                          result
-                     }
-
-                     fn as_primary_key(&self,     _string_storage: &mut silo::StaticStringStorage,
-                         _column_name: Option<&'static str>,
-                     ) -> Option<(&'static str, u64)> {
-                         None
                      }
                  }
 
