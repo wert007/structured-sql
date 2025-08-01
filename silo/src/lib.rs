@@ -1054,7 +1054,9 @@ impl<T: RowType> FromRowType<Self> for T {
     }
 }
 
-pub trait FromRowType<T: RowType>: MustBeEqual<T::Filtered> + Sized {
+pub trait FromRowType<T: RowType>:
+    MustBeEqual<T::Filtered> + Sized + HasPartialRepresentation
+{
     fn from_row_type(value: Vec<T>) -> Vec<Self>;
 }
 
@@ -1132,7 +1134,7 @@ pub trait SqlTable<'a> {
     fn update(
         &self,
         filter: <Self::RowType as Filterable>::Filtered,
-        updated: <Self::RowType as HasPartialRepresentation>::Partial,
+        updated: <Self::ValueType as HasPartialRepresentation>::Partial,
     ) -> Result<(), rusqlite::Error>;
     fn count(
         &self,
@@ -1600,24 +1602,16 @@ impl<T: AsParams> PartialRow for Vec<T> {
 pub fn update_rows<'a, T: IntoSqlTable<'a> + RowType>(
     connection: &&'a rusqlite::Connection,
     filter: GenericFilter,
-    value: T::Partial,
+    value: impl ToRows<T::Partial>,
 ) -> Result<(), rusqlite::Error>
 where
     T::Partial: PartialRow,
 {
-    // let columns = T::COLUMNS
-    //     .into_iter()
-    //     .map(|c| c.name)
-    //     .fold(String::new(), |mut acc, cur| {
-    //         if acc.is_empty() {
-    //             cur.into()
-    //         } else {
-    //             acc.push_str(", ");
-    //             acc.push_str(cur);
-    //             acc
-    //         }
-    //     });
-    let columns: Vec<String> = value.used_column_names(None);
+    let values = value.to_rows();
+    if values.is_empty() {
+        return Ok(());
+    }
+    let columns: Vec<String> = values[0].used_column_names(None);
     if columns.is_empty() {
         return Ok(());
     }
@@ -1634,14 +1628,16 @@ where
                 acc
             }
         });
-    let values: Vec<&dyn rusqlite::ToSql> = value.used_values();
     let mut sql = format!("UPDATE {} SET {columns_set}", T::NAME);
     sql.push(' ');
     sql.push_str(&filter.to_sql());
     #[cfg(feature = "debug_sql")]
     dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
-    statement.execute(values.as_slice())?;
+    for value in values {
+        let values: Vec<&dyn rusqlite::ToSql> = value.used_values();
+        statement.execute(values.as_slice())?;
+    }
     Ok(())
 }
 
