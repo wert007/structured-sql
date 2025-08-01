@@ -55,7 +55,7 @@ mod test {
         }
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Default)]
     struct PartialCoord {
         x: Option<f64>,
         y: Option<f64>,
@@ -329,7 +329,13 @@ where
                 row,
                 connection,
             )
-            .unwrap();
+            .unwrap_or_else(|| {
+                dbg!(
+                    row,
+                    // <<T as HasPartialRepresentation>::Partial as Default>::default()
+                );
+                panic!("Partial should always match???")
+            });
             Ok(<T as MigrationHandler>::migrate(
                 string_storage,
                 partial,
@@ -949,7 +955,7 @@ pub trait HasValue {
 }
 
 pub trait HasPartialRepresentation<T = Self>: Sized {
-    type Partial: HasValue;
+    type Partial: HasValue + Default;
     // type Partial: PartialType<T>;
 }
 
@@ -959,7 +965,7 @@ impl<T> HasValue for Option<T> {
     }
 }
 
-impl<T: HasValue> HasPartialRepresentation for T {
+impl<T: HasValue + Default> HasPartialRepresentation for T {
     type Partial = T;
 }
 
