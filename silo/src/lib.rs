@@ -959,24 +959,21 @@ impl<T> HasValue for Option<T> {
     }
 }
 
-impl<T: HasPartialRepresentation> HasPartialRepresentation for Option<T>
-// where
-//     Option<<T as HasPartialRepresentation>::Partial>: From<Option<T>>,
-{
-    type Partial = Option<T::Partial>;
+impl<T: HasValue> HasPartialRepresentation for T {
+    type Partial = T;
 }
+
+// impl<T: HasPartialRepresentation> HasPartialRepresentation for Option<T>
+// // where
+// //     Option<<T as HasPartialRepresentation>::Partial>: From<Option<T>>,
+// {
+//     type Partial = Option<T::Partial>;
+// }
 
 impl<T> HasValue for Vec<T> {
     fn has_values(&self) -> bool {
         !self.is_empty()
     }
-}
-
-impl<T: HasPartialRepresentation> HasPartialRepresentation for Vec<T>
-// where
-//     Vec<<T as HasPartialRepresentation>::Partial>: From<Vec<T>>,
-{
-    type Partial = Vec<T>;
 }
 
 pub trait MigrationHandler: Sized + HasPartialRepresentation

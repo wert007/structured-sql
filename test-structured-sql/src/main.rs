@@ -75,8 +75,9 @@ pub enum Availability {
 
 #[derive(Default, Debug, Clone, IntoSqlTable)]
 pub struct Movie {
+    #[silo(primary)]
     title: String,
-    url: String,
+    url: Vec<String>,
     available: Availability,
 }
 
