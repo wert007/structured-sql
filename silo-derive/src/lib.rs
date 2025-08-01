@@ -680,8 +680,8 @@ impl Base {
         } else {
             name.clone()
         };
-        let table_name = format_ident!("{row_type_name}Table");
-        let filter_name = format_ident!("{row_type_name}Filter");
+        let table_name = format_ident!("{name}Table");
+        let filter_name = format_ident!("{name}Filter");
         let partial_name = format_ident!("Partial{row_type_name}");
         let migration_handler = if attribute_struct_data.has_custom_migration_handler {
             proc_macro2::TokenStream::new()
