@@ -1312,7 +1312,7 @@ impl Base {
                     let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
                     let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection);
                     let #primary_key_field = #primary_key_field??;
-                    let db = unsafe { Database::from_connection(connection) }.ok()?;
+                    let db = unsafe { silo::Database::from_connection(connection) }.ok()?;
                     let table = db.load::<#name>().ok()?;
 
                     let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field)).ok()?;
@@ -1325,7 +1325,7 @@ impl Base {
                 ) -> Option<Self> {
                     let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
                     let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection)??;
-                    let db = unsafe { Database::from_connection(connection) }.ok()?;
+                    let db = unsafe { silo::Database::from_connection(connection) }.ok()?;
                     let table = db.load::<#name>().ok()?;
                     table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field)).ok()?.into_iter().next().map(Into::into)
                 }
