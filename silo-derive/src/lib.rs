@@ -1423,12 +1423,32 @@ fn create_row_type(
     added_fields: &mut Vec<Ident>,
     removed_fields_from_special_handling: &mut Vec<Ident>,
 ) -> proc_macro2::TokenStream {
+    let primary_key_field = &members
+        .iter()
+        .find(|m| !m.is_skipped && m.is_primary)
+        .expect("Checked, that this exists")
+        .name;
+    let cur_primary_key_field = format_ident!("cur_{primary_key_field}");
+    let primary_key_type = &members
+        .iter()
+        .find(|m| !m.is_skipped && m.is_primary)
+        .expect("Checked, that this exists")
+        .type_;
+    let has_primary_key_field = format_ident!("has_{primary_key_field}");
+
     removed_fields_from_special_handling.extend(
         members
             .iter()
             .filter(|m| !m.is_skipped && !m.is_primary)
             .map(|m| m.name.clone()),
     );
+    columns_in_macro.clear();
+    columns_in_macro.push(quote!(&[silo::SqlColumn {
+        name: stringify!(#primary_key_field),
+        r#type: <#primary_key_type as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
+        is_unique: false,
+        is_primary: true,
+    }]));
     for vec_able_member in members.iter().filter(|m| !m.is_skipped && m.has_vec()) {
         let n = &vec_able_member.name;
         let remaining = format_ident!("{n}_silo_remaining_elements");
@@ -1439,12 +1459,6 @@ fn create_row_type(
         field_names_without_skips.push(quote!(#remaining));
         partial_field_definitions.push(quote!(#remaining: Option<usize>));
         columns.push(quote!(&[silo::SqlColumn {
-            name: stringify!(#remaining),
-            r#type: <usize as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
-            is_unique: false,
-            is_primary: false,
-        }]));
-        columns_in_macro.push(quote!(&[silo::SqlColumn {
             name: stringify!(#remaining),
             r#type: <usize as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
             is_unique: false,
@@ -1519,19 +1533,6 @@ fn create_row_type(
                 quote!((#acc, (#remaining, #name)))
             }
         });
-
-    let primary_key_field = &members
-        .iter()
-        .find(|m| !m.is_skipped && m.is_primary)
-        .expect("Checked, that this exists")
-        .name;
-    let cur_primary_key_field = format_ident!("cur_{primary_key_field}");
-    let primary_key_type = &members
-        .iter()
-        .find(|m| !m.is_skipped && m.is_primary)
-        .expect("Checked, that this exists")
-        .type_;
-    let has_primary_key_field = format_ident!("has_{primary_key_field}");
 
     let column_macro_name = format_ident!("column_names_with_prefix_for_{name}");
 
@@ -1737,9 +1738,12 @@ fn create_row_type(
         impl<'a> silo::IntoSqlTable<'a> for #name {
             type Table = #table_name<'a>;
             const COLUMNS: &'static [silo::SqlColumn] =
-                &silo::konst::slice::slice_concat!{silo::SqlColumn ,&[
-                    #(#columns,)*
-                ]};
+                &[silo::SqlColumn {
+                    name: stringify!(#primary_key_field),
+                    r#type: <#primary_key_type as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
+                    is_primary: true,
+                    is_unique: false,
+                }];
 
             const NAME: &'static str = stringify!(#table_name);
         }
