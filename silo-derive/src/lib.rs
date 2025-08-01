@@ -1863,6 +1863,7 @@ fn create_partial<const IS_STRUCT: bool>(
 
         impl From<#partial_name> for Option<#name> {
             fn from(value: #partial_name) -> Option<#name> {
+                use silo::PartialType;
                 value.transpose()
             }
         }
