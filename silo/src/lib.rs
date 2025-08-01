@@ -37,9 +37,10 @@ mod test {
     use rusqlite::{Connection, OptionalExtension};
 
     use crate::{
-        AsParams, Database, Filterable, FromRow, GenericFilter, HasPartialRepresentation, HasValue,
-        IntoGenericFilter, IntoSqlTable, MigrationHandler, PartialType, RowType, SqlColumn,
-        SqlColumnFilter, SqlColumnType, SqlTable, StaticStringStorage, ToRows, handle_migration,
+        AsParams, Database, Filterable, FromRow, GenericFilter, GenericOrder,
+        HasPartialRepresentation, HasValue, IntoGenericFilter, IntoSqlTable, MigrationHandler,
+        PartialType, RowType, SqlColumn, SqlColumnFilter, SqlColumnType, SqlTable,
+        StaticStringStorage, ToRows, handle_migration,
     };
 
     #[derive(Debug, PartialEq)]
@@ -254,6 +255,7 @@ mod test {
                 &self.connection,
                 &mut self.string_storage.lock().unwrap(),
                 generic,
+                GenericOrder::default(),
             )
         }
 
@@ -976,14 +978,14 @@ impl<T> PartialType<Option<T>> for Option<Option<T>>
     }
 }
 
-impl<U, T: PartialType<U>> PartialType<Vec<U>> for Vec<T> {
-    fn transpose(self) -> Option<Vec<U>> {
+impl<T> PartialType<Vec<T>> for Vec<T> {
+    fn transpose(self) -> Option<Vec<T>> {
         if self.is_empty() {
             Some(Vec::new())
         } else {
             let mut result = Vec::with_capacity(self.len());
             for s in self {
-                result.push(s.transpose()?);
+                result.push(s);
             }
             Some(result)
         }
@@ -1022,7 +1024,7 @@ impl<T: HasPartialRepresentation> HasPartialRepresentation for Vec<T>
 // where
 //     Vec<<T as HasPartialRepresentation>::Partial>: From<Vec<T>>,
 {
-    type Partial = Vec<T::Partial>;
+    type Partial = Vec<T>;
 }
 
 pub trait MigrationHandler: Sized + HasPartialRepresentation
@@ -1339,6 +1341,74 @@ pub trait IntoGenericFilter {
     ) -> GenericFilter;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OrderingAscDesc {
+    Ascending,
+    Descending,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OrderingNulls {
+    NullsFirst,
+    NullsLast,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub struct Ordering {
+    pub asc_desc: Option<OrderingAscDesc>,
+    pub nulls: Option<OrderingNulls>,
+}
+
+#[derive(Debug, Default)]
+pub struct GenericOrder {
+    pub columns: Vec<(&'static str, Ordering)>,
+}
+
+impl GenericOrder {
+    fn to_sql(&self) -> String {
+        if self.columns.is_empty() {
+            return String::new();
+        }
+        let mut result: String = "ORDER BY".into();
+        for (i, (column, ordering)) in self.columns.iter().enumerate() {
+            if i > 0 {
+                result.push(',');
+            }
+            result.push(' ');
+            result.push_str(column);
+            match ordering.asc_desc {
+                Some(OrderingAscDesc::Ascending) => {
+                    result.push(' ');
+                    result.push_str("ASC");
+                }
+                Some(OrderingAscDesc::Descending) => {
+                    result.push(' ');
+                    result.push_str("DESC");
+                }
+                None => {}
+            }
+            match ordering.nulls {
+                Some(OrderingNulls::NullsFirst) => {
+                    result.push(' ');
+                    result.push_str("NULLS FIRST");
+                }
+                Some(OrderingNulls::NullsLast) => {
+                    result.push(' ');
+                    result.push_str("NULLS LAST");
+                }
+                None => {}
+            }
+        }
+        result
+    }
+}
+
+impl GenericOrder {
+    pub fn add(&mut self, column: &'static str, order: Ordering) {
+        self.columns.push((column, order));
+    }
+}
+
 pub struct GenericFilter {
     pub columns: HashMap<&'static str, SqlColumnFilter<SqlValue>>,
 }
@@ -1630,6 +1700,7 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a> + RowType, U: FromRowType<T>
     connection: &&'a rusqlite::Connection,
     string_storage: &mut StaticStringStorage,
     filter: GenericFilter,
+    order: GenericOrder,
 ) -> Result<Vec<U>, rusqlite::Error> {
     let columns = T::COLUMNS
         .into_iter()
@@ -1646,6 +1717,8 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a> + RowType, U: FromRowType<T>
     let mut sql = format!("SELECT {columns} from {}", T::NAME);
     sql.push(' ');
     sql.push_str(&filter.to_sql());
+    sql.push(' ');
+    sql.push_str(&order.to_sql());
     #[cfg(feature = "debug_sql")]
     dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;

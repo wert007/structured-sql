@@ -11,6 +11,8 @@ path = "../tmp.rs"  # or whatever your single file is called
 chrono = "0.4.41"
 facet = "0.27.14"
 rusqlite = { version = "0.36.0", features = ["bundled"] }
-silo = { version = "0.1.0", path = "../silo" }
+silo = { version = "0.1.0", path = "../silo", features = [
+    # "debug_sql"
+] }
 silo-derive = { version = "0.1.0", path = "../silo-derive" }
 time = "0.3.41"

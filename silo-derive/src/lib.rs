@@ -742,12 +742,28 @@ impl Base {
             partial_name,
             visibility,
             on_conflict,
+            members,
             ..
         } = self;
+        let iterable_remaining_elements = members
+            .iter()
+            .filter(|m| !m.is_skipped && !m.is_primary && m.has_vec())
+            .map(|m| format_ident!("{}_silo_remaining_elements", m.name));
         quote! {
         #visibility struct #table_name<'a> {
             connection: &'a silo::rusqlite::Connection,
             string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>,
+        }
+
+        impl<'a> #table_name<'a> {
+            fn default_order() -> silo::GenericOrder {
+                let mut result = silo::GenericOrder::default();
+                #(result.add(stringify!(#iterable_remaining_elements), silo::Ordering {
+                    asc_desc: Some(silo::OrderingAscDesc::Descending),
+                    nulls: Some(silo::OrderingNulls::NullsLast),
+                });)*
+                result
+            }
         }
 
 
@@ -804,7 +820,7 @@ impl Base {
             fn filter(&self, filter: #filter_name) -> Result<Vec<#name>, silo::rusqlite::Error> {
                 use silo::IntoGenericFilter;
                 let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-                silo::query_table_filtered::<Self::RowType, Self::ValueType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic)
+                silo::query_table_filtered::<Self::RowType, Self::ValueType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic, Self::default_order())
             }
 
             fn delete(&self, filter: #filter_name) -> Result<usize, silo::rusqlite::Error> {
@@ -1094,8 +1110,8 @@ impl Base {
             .iter()
             .filter(|m| !m.is_skipped)
             .map(|m| {
-                if *has_vec_as_member && (!m.has_vec() && !m.is_primary) {
-                    let t = &m.type_;
+                if *has_vec_as_member && !m.is_primary {
+                    let t = Member::try_strip_vec(&m.type_);
                     syn::parse_quote!(Option<#t>)
                 } else {
                     Member::try_strip_vec(&m.type_).clone()
@@ -1104,25 +1120,27 @@ impl Base {
             .collect::<Vec<_>>();
 
         let row_type_definition = if *has_vec_as_member {
-            field_names.push(format_ident!("silo_order"));
-            let ty_usize: Result<syn::Type, _> = syn::parse_str("usize");
-            let ty_usize = ty_usize.unwrap();
-            field_types.push(ty_usize);
-            field_names_with_skips.push(quote!(silo_order));
-            field_names_without_skips.push(quote!(silo_order));
-            partial_field_definitions.push(quote!(silo_order: Option<usize>));
-            columns.push(quote!(&[silo::SqlColumn {
-                name: "silo_order",
-                r#type: <usize as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
-                is_unique: false,
-                is_primary: false,
-            }]));
-            columns_in_macro.push(quote!(&[silo::SqlColumn {
-                name: concat!($prefix,"_silo_order"),
-                r#type: <usize as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
-                is_unique: false,
-                is_primary: false,
-            }]));
+            for vec_able_member in members.iter().filter(|m| !m.is_skipped && m.has_vec()) {
+                let n = &vec_able_member.name;
+                let remaining = format_ident!("{n}_silo_remaining_elements");
+                field_names.push(remaining.clone());
+                field_types.push(syn::parse_quote!(usize));
+                field_names_with_skips.push(quote!(#remaining));
+                field_names_without_skips.push(quote!(#remaining));
+                partial_field_definitions.push(quote!(#remaining: Option<usize>));
+                columns.push(quote!(&[silo::SqlColumn {
+                    name: stringify!(#remaining),
+                    r#type: <usize as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
+                    is_unique: false,
+                    is_primary: false,
+                }]));
+                columns_in_macro.push(quote!(&[silo::SqlColumn {
+                    name: stringify!(#remaining),
+                    r#type: <usize as silo::RelatedSqlColumnType>::SQL_COLUMN_TYPE,
+                    is_unique: false,
+                    is_primary: false,
+                }]));
+            }
             let row_type_fields = members.iter().filter(|m| !m.is_skipped).map(|m| {
                 let n = &m.name;
                 let is_vec = m.has_vec();
@@ -1130,15 +1148,33 @@ impl Base {
                 let t = m.create_field_type();
                 if !is_vec && !is_primary {
                     quote! {#n: Option<#t>,}
-                } else {
+                } else if !is_vec {
                     quote! {#n: #t,}
+                } else {
+                    let remaining = format_ident!("{n}_silo_remaining_elements");
+
+                    quote! {#n: Option<#t>,
+                    #remaining: usize,}
                 }
             });
 
             let iterable_field_names: Vec<_> = members
                 .iter()
                 .filter(|m| !m.is_skipped && m.has_vec())
-                .map(|m| m.create_field_name())
+                .map(|m| m.name.clone())
+                .collect();
+            let cur_iterable_fields: Vec<_> = iterable_field_names
+                .iter()
+                .map(|n| format_ident!("cur_{n}"))
+                .collect();
+
+            let iterable_remaining_names: Vec<_> = iterable_field_names
+                .iter()
+                .map(|n| format_ident!("{n}_silo_remaining_elements"))
+                .collect();
+            let iterable_lens: Vec<_> = iterable_field_names
+                .iter()
+                .map(|n| format_ident!("{n}_len"))
                 .collect();
             let remaining_fields: Vec<_> = members
                 .iter()
@@ -1156,9 +1192,9 @@ impl Base {
                 .fold(proc_macro2::TokenStream::new(), |acc, cur| {
                     let name = cur.create_field_name();
                     if acc.is_empty() {
-                        quote!(self.#name.into_iter())
+                        quote!(self.#name.into_iter().map(Some).enumerate().chain(std::iter::repeat((usize::MAX, None))))
                     } else {
-                        quote!(#acc.zip(self.#name))
+                        quote!(#acc.zip(self.#name.into_iter().map(Some).enumerate().chain(std::iter::repeat((usize::MAX, None)))))
                     }
                 });
             let iterable_fields_as_pattern_match = members
@@ -1166,10 +1202,11 @@ impl Base {
                 .filter(|m| !m.is_skipped && m.has_vec())
                 .fold(proc_macro2::TokenStream::new(), |acc, cur| {
                     let name = cur.create_field_name();
+                    let remaining = format_ident!("{}_silo_remaining_elements", cur.name);
                     if acc.is_empty() {
-                        quote!(#name)
+                        quote!((#remaining, #name))
                     } else {
-                        quote!((#acc, #name))
+                        quote!((#acc, (#remaining, #name)))
                     }
                 });
 
@@ -1231,7 +1268,6 @@ impl Base {
 
                     #[derive(Clone, Debug)]
                     struct #row_type_name {
-                        silo_order: usize,
                         #(#row_type_fields)*
                     }
 
@@ -1303,27 +1339,30 @@ impl Base {
                             let mut result = Vec::new();
                             let mut #cur_primary_key_field = values[0].#primary_key_field.clone();
                             #(let mut #cur_remaining_fields = values[0].#remaining_fields.clone().expect("First value of a vec should be set!");)*
-                            let mut buffer = Vec::new();
+                            #(let mut #cur_iterable_fields = Vec::new();)*
                             while let Some(value) = values.pop() {
                                 if #cur_primary_key_field == value.#primary_key_field {
-                                    buffer.push(value);
+                                    #(
+                                        if let Some(value) = value.#iterable_field_names {
+                                            #cur_iterable_fields.push(value);
+                                        })*
                                     continue;
                                 }
-                                buffer.sort_by_key(|x| x.silo_order);
+                                #(#cur_iterable_fields.reverse();)*
                                 result.push(#name {
                                     #primary_key_field: #cur_primary_key_field,
-                                    #(#iterable_field_names: buffer.into_iter().map(|m|m.#iterable_field_names).collect(),)*
+                                    #(#iterable_field_names: #cur_iterable_fields,)*
                                     #(#remaining_fields: #cur_remaining_fields.clone(),)*
                                 });
                                 #cur_primary_key_field = value.#primary_key_field.clone();
                                 #(#cur_remaining_fields = value.#remaining_fields.clone().expect("First value of a vec should be set!");)*
-                                buffer = Vec::new();
+                                #(#cur_iterable_fields = Vec::new();)*
                             }
-                            if !buffer.is_empty() {
-                                buffer.sort_by_key(|x| x.silo_order);
+                            if #(!#cur_iterable_fields.is_empty() ||)* false {
+                                #(#cur_iterable_fields.reverse();)*
                                 result.push(#name {
                                     #primary_key_field: #cur_primary_key_field,
-                                    #(#iterable_field_names: buffer.into_iter().map(|m|m.#iterable_field_names).collect(),)*
+                                    #(#iterable_field_names: #cur_iterable_fields,)*
                                     #(#remaining_fields: #cur_remaining_fields.clone(),)*
                                 });
 
@@ -1336,13 +1375,14 @@ impl Base {
                         fn to_rows(self) -> Vec<#row_type_name> {
                             let mut result = Vec::new();
                             #(let mut #remaining_fields = Some(self.#remaining_fields);)*
-                            for  (silo_order, #iterable_fields_as_pattern_match) in #iterable_fields_as_iterator.enumerate() {
+                            #(let #iterable_lens = self.#iterable_field_names.len();)*
+                            let len = #((#iterable_lens).max)*(0);
+                            for #iterable_fields_as_pattern_match in #iterable_fields_as_iterator.take(len) {
                                 result.push(#row_type_name {
-                                    silo_order,
-                                    // TODO: These should be options and only set for the first one!
                                     #primary_key_field: self.#primary_key_field.clone(),
                                     #(#remaining_fields: #remaining_fields.take(),)*
                                     #(#iterable_field_names,)*
+                                    #(#iterable_remaining_names: #iterable_lens.saturating_sub(#iterable_remaining_names),)*
                                 });
                             }
                             result

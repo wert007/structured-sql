@@ -6,7 +6,7 @@ set shell := ["powershell.exe", "-c"]
     echo '#![allow(unused_variables,unused_mut,unused_imports)]' >> tmp-utf16.rs
     $(cargo expand --bin test-structured-sql -p test-structured-sql 2>$null) >> tmp-utf16.rs
     Get-Content tmp-utf16.rs | Set-Content -Encoding utf8 tmp.rs
-    -cargo +nightly build --bin standalone 2>$null
+    -cargo +nightly build --bin standalone
     rm tmp-utf16.rs
 
 default:

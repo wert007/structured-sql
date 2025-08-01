@@ -182,6 +182,7 @@ struct FooWithVec {
     #[silo(primary)]
     the_id: usize,
     values_todo_keywords: Vec<String>,
+    little_list: Vec<u32>,
     non_vec_field: String,
 }
 
@@ -200,6 +201,7 @@ fn main() {
             child: FooWithVec {
                 the_id: 31,
                 values_todo_keywords: vec!["hello".into(), "world".into(), "test".into()],
+                little_list: vec![42, 43, 44, 45, 46, 47, 48, 49, 421, 422, 423],
                 non_vec_field: "Do not duplicate data needlessly".into(),
             },
             dummy_value: "I just think they are neat!".into(),
