@@ -1297,7 +1297,7 @@ impl Base {
 
                         fn as_primary_key(
                             &self,
-                            string_storage: &mut StaticStringStorage,
+                            string_storage: &mut silo::StaticStringStorage,
                             column_name: Option<&'static str>,
                         ) -> Option<(&'static str, u64)> {
                             let name = column_name.map(|c| string_storage.store(&[c, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
