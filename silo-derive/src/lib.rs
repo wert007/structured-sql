@@ -1284,7 +1284,7 @@ impl Base {
                 }
 
                 #[derive(Clone, Debug)]
-                struct #row_type_name {
+                #visibility struct #row_type_name {
                     #(#row_type_fields)*
                 }
 

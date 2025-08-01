@@ -74,11 +74,25 @@ pub enum Availability {
 }
 
 #[derive(Default, Debug, Clone, IntoSqlTable)]
+#[silo(migrate)]
 pub struct Movie {
     #[silo(primary)]
     title: String,
     url: Vec<String>,
     available: Availability,
+}
+
+impl silo::MigrationHandler for MovieRowType {}
+
+impl silo::MigrationHandler for Movie {
+    fn migrate(
+        _string_storage: &mut StaticStringStorage,
+        partial: Self::Partial,
+        _row: &rusqlite::Row,
+        _connection: &rusqlite::Connection,
+    ) -> Option<Self> {
+        Some(partial.transpose().expect("Should not fail!"))
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
