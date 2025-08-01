@@ -1403,8 +1403,8 @@ impl Base {
                     fn insert_into_connected_foreign_tables(
                         self,
                         is_top_level: bool,
-                        connection: &rusqlite::Connection,
-                    ) -> rusqlite::Result<()> {
+                        connection: &silo::rusqlite::Connection,
+                    ) -> silo::rusqlite::Result<()> {
                         if is_top_level {
                             return Ok(())
                         }
@@ -1418,8 +1418,8 @@ impl Base {
                     fn insert_into_connected_foreign_tables(
                         self,
                         is_top_level: bool,
-                        connection: &rusqlite::Connection,
-                    ) -> rusqlite::Result<()> {
+                        connection: &silo::rusqlite::Connection,
+                    ) -> silo::rusqlite::Result<()> {
                         if is_top_level {
                             return Ok(());
                         }
@@ -1436,8 +1436,8 @@ impl Base {
                     fn insert_into_connected_foreign_tables(
                         self,
                         is_top_level: bool,
-                        connection: &rusqlite::Connection,
-                    ) -> rusqlite::Result<()> {
+                        connection: &silo::rusqlite::Connection,
+                    ) -> silo::rusqlite::Result<()> {
                         #(
                             self.#field_names_with_skips.insert_into_connected_foreign_tables(false, connection)?;
                         )*
