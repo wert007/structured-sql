@@ -1648,7 +1648,7 @@ fn create_row_type(
 
                 let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field.clone()));
                 // dbg!(&elements);
-                elements.ok()?.into_iter().next().unwrap_or(Default::default())
+                elements.ok()?.into_iter().next()
             }
         }
 
