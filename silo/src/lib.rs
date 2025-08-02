@@ -633,12 +633,10 @@ fn compare_columns(actual: &[SqlColumn], expected: &[SqlColumn]) -> bool {
         }
     }
     for column in actual {
-        dbg!(column.name);
         if !seen_columns.contains(&column.name) {
             necessary_alternations.push(TableAlteration::DeleteColumn(column.name));
         }
     }
-    dbg!(&necessary_alternations);
     return !necessary_alternations.is_empty();
 }
 

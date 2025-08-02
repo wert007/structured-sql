@@ -1641,12 +1641,14 @@ fn create_row_type(
                 use silo::SqlTable;
                 let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
                 let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection);
+                dbg!(&#primary_key_field);
                 let #primary_key_field = #primary_key_field??;
                 let db = unsafe { silo::Database::from_connection(connection) }.ok()?;
                 let table = db.load::<#name>().ok()?;
 
-                let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field.clone())).ok()?;
-                elements.into_iter().next()
+                let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field.clone()));
+                dbg!(&elements)
+                elements.ok()?.into_iter().next()
             }
         }
 
@@ -1660,12 +1662,14 @@ fn create_row_type(
                 use silo::SqlTable;
                 let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
                 let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection);
+                dbg!(&#primary_key_field);
                 let #primary_key_field = #primary_key_field??;
                 let db = unsafe { silo::Database::from_connection(connection) }.ok()?;
                 let table = db.load::<#name>().ok()?;
 
-                let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field.clone())).ok()?;
-                elements.into_iter().next().map(Into::into)
+                let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field.clone()));
+                dbg!(&elements);
+                elements.ok()?.into_iter().next().map(Into::into)
             }
         }
 
