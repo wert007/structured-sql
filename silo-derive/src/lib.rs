@@ -1647,7 +1647,7 @@ fn create_row_type(
                 let table = db.load::<#name>().ok()?;
 
                 let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field.clone()));
-                dbg!(&elements)
+                dbg!(&elements);
                 elements.ok()?.into_iter().next()
             }
         }
