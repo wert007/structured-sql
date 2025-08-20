@@ -1684,21 +1684,20 @@ fn create_row_type(
                 let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#primary_key_field)])).unwrap_or(stringify!(#primary_key_field));
                 let #primary_key_field = <<#primary_key_type as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection);
                 let Some(Some(#primary_key_field)) = #primary_key_field else {
-                    eprintln!("Primary key field was none!!!");
-                    dbg!(&#primary_key_field, &row);
+                    // dbg!(&#primary_key_field, &row);
                     return None;
                 };
                 let Some(db) = unsafe { silo::Database::from_connection(connection) }.ok() else {
-                    eprintln!("Database could not be loaded!");
+                    // eprintln!("Database could not be loaded!");
                     return None;
                 };
                 let Some(table) = db.load::<#name>().ok() else {
-                    eprintln!("Table could not be loaded!");
+                    // eprintln!("Table could not be loaded!");
                     return None;
                 };
 
                 let Some(elements) = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field.clone())).ok() else {
-                    eprintln!("Filtering the elements failed!");
+                    // eprintln!("Filtering the elements failed!");
                     return None;
                 };
                 elements.into_iter().next().map(|x| Some(x.into())).unwrap_or(Default::default())

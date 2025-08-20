@@ -1667,6 +1667,14 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a> + RowType, U: FromRowType<T>
                 acc
             }
         });
+    if !filter
+        .columns
+        .keys()
+        .into_iter()
+        .all(|k| T::COLUMNS.iter().any(|c| &c.name == k))
+    {
+        todo!("Load missing tables?")
+    }
     let mut sql = format!("SELECT {columns} from {}", T::NAME);
     sql.push(' ');
     sql.push_str(&filter.to_sql());
