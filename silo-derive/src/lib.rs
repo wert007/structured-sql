@@ -131,6 +131,7 @@ impl AttributeFieldData {
     }
 }
 
+#[derive(Clone)]
 struct Member {
     variant: Ident,
     name: Ident,
@@ -1167,10 +1168,36 @@ impl Base {
             )
         };
 
+        let row_type_members: Vec<_> = members
+            .iter()
+            .cloned()
+            .flat_map(|m| {
+                if m.has_vec() {
+                    let remaining = format_ident!("{}_silo_remaining_elements", m.name);
+
+                    vec![
+                        Member {
+                            type_: syn::parse_quote!(usize),
+                            name: remaining,
+                            is_primary: false,
+                            is_unique: false,
+                            is_optional: false,
+                            name_is_generated: false,
+                            ..m.clone()
+                        },
+                        Member {
+                            type_: Member::try_strip_vec(&m.type_).clone(),
+                            ..m
+                        },
+                    ]
+                } else {
+                    vec![m]
+                }
+            })
+            .collect();
         let partial = create_partial::<true>(
             row_type_name,
-            &field_names,
-            &field_types,
+            &row_type_members,
             &members
                 .iter()
                 .filter(|m| m.is_skipped)
@@ -1186,6 +1213,7 @@ impl Base {
                 .map(|m| m.name.clone())
                 .chain(added_fields)
                 .collect::<Vec<_>>(),
+            &[],
         );
 
         quote! {
@@ -1254,7 +1282,6 @@ impl Base {
             row_type_name,
             table_name,
             members,
-            visibility,
             migration_handler,
             partial_name,
             has_vec_as_member,
@@ -1286,13 +1313,22 @@ impl Base {
         let create_prefixed_columns_macro =
             format_ident!("column_names_with_prefix_for_{row_type_name}");
 
-        let partial = create_partial::<false>(
-            row_type_name,
-            &[format_ident!("variant")],
-            &[syn::parse_quote!(String)],
-            &[],
-            &[],
-        );
+        let enum_members: Vec<_> = members
+            .iter()
+            .cloned()
+            .chain(Some(Member {
+                variant: row_type_name.clone(),
+                name: format_ident!("variant"),
+                visibility: syn::parse_quote!(pub),
+                type_: syn::parse_quote!(String),
+                is_primary: false,
+                is_unique: false,
+                is_optional: false,
+                is_skipped: false,
+                name_is_generated: false,
+            }))
+            .collect();
+        let partial = create_partial::<false>(row_type_name, &enum_members, &[], &[], variants);
 
         let partial_row_type_name = format_ident!("Partial{row_type_name}");
         quote! {
@@ -1538,23 +1574,7 @@ fn create_row_type(
 
     let partial = create_partial::<true>(
         name,
-        &members
-            .iter()
-            .filter(|m| !m.is_skipped)
-            .map(|m| m.name.clone())
-            .collect::<Vec<_>>(),
-        &members
-            .iter()
-            .filter(|m| !m.is_skipped)
-            .map(|m| {
-                // if m.has_vec() || m.is_primary {
-                m.type_.clone()
-                // } else {
-                //     let t = &m.type_;
-                //     syn::parse_quote!(Option<#t>)
-                // }
-            })
-            .collect::<Vec<_>>(),
+        &members,
         &members
             .iter()
             .filter(|m| m.is_skipped)
@@ -1565,6 +1585,7 @@ fn create_row_type(
             .filter(|m| !m.is_skipped && !type_is_option(&m.type_))
             .map(|m| m.name.clone())
             .collect::<Vec<_>>(),
+        &[],
     );
 
     // let partial_normal_name = format_ident!("Partial{name}");
@@ -1816,17 +1837,21 @@ impl ToTokens for Base {
 
 fn create_partial<const IS_STRUCT: bool>(
     name: &syn::Ident,
-    field_names: &[syn::Ident],
-    field_types: &[syn::Type],
+    members: &[Member],
     unrepresented_fields: &[syn::Ident],
     special_handling_fields_for_transpose: &[syn::Ident],
+    variants: &[syn::Ident],
 ) -> proc_macro2::TokenStream {
     let partial_name = format_ident!("Partial{name}");
-    let partial_fields = field_names
-        .iter()
-        .zip(field_types.iter())
-        .map(|(n, t)| quote!(#n: <#t as silo::HasPartialRepresentation>::Partial,));
-    let from_field_conversion = field_names.iter().zip(field_types.iter()).map(|(n, t)| {
+    let partial_fields = members.iter().filter(|m| !m.is_skipped).map(|m| {
+        let n = &m.name;
+        let t = &m.type_;
+        quote!(#n: <#t as silo::HasPartialRepresentation>::Partial,)
+    });
+    let from_field_conversion = members.iter().filter(|m| !m.is_skipped).map(|m| {
+        let n = &m.name;
+        let t = &m.type_;
+
         if type_is_vec(t) {
             quote!(#n.into_iter().map(Into::into).collect())
         } else if type_is_option(t) {
@@ -1834,6 +1859,34 @@ fn create_partial<const IS_STRUCT: bool>(
         } else {
             quote!(#n.into())
         }
+    });
+    let field_names: Vec<_> = members
+        .iter()
+        .filter(|m| !m.is_skipped)
+        .map(|m| &m.name)
+        .collect();
+    let field_types: Vec<_> = members
+        .iter()
+        .filter(|m| !m.is_skipped)
+        .map(|m| &m.type_)
+        .collect();
+    let variant_match = Member::create_variant_pattern(variants, members);
+    let all_fields_from_variant = variants.iter().map(|v| {
+        let mut result = quote!();
+        for member in members.iter().filter(|m| !m.is_skipped) {
+            result = if &member.variant == v {
+                let name = &member.name;
+
+                quote! {#result Some(#name),}
+                // TODO: Make sure, there are no fields named variant flying around!
+            } else if member.name.to_string().as_str() == "variant" {
+                quote!(#result stringify!(#v).to_string(),)
+            } else {
+                quote!(#result None,)
+            }
+        }
+        result = quote!((#result));
+        result
     });
 
     let from_impl = if IS_STRUCT {
@@ -1850,9 +1903,15 @@ fn create_partial<const IS_STRUCT: bool>(
         quote! {
             impl From<#name> for #partial_name {
                 fn from(value: #name) -> #partial_name {
-                    let variant = *value.variant_name();
+                    let (#(#field_names,)*) = match value {
+                        #(
+                            #name::#variant_match => #all_fields_from_variant,
+                        )*
+                    };
+
+                    #(let #field_names = #from_field_conversion;)*
                     #partial_name {
-                        variant: Some(variant.into()),
+                       #(#field_names,)*
                     }
                 }
             }
@@ -1885,7 +1944,11 @@ fn create_partial<const IS_STRUCT: bool>(
         }
     };
 
-    let from_row_impl = if field_types.iter().any(|t| type_is_vec(t)) {
+    let from_row_impl = if members
+        .iter()
+        .filter(|m| !m.is_skipped)
+        .any(|m| type_is_vec(&m.type_))
+    {
         quote! {}
     } else {
         quote! {
