@@ -1899,11 +1899,7 @@ fn create_partial<const IS_STRUCT: bool>(
                 use silo::rusqlite::OptionalExtension;
                 #(
                     let actual_column_name = row_name.map(|r| string_storage.store(&[r, "_", stringify!(#field_names)])).unwrap_or(stringify!(#field_names));
-                    let Some(#field_names) = <<#field_types as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection) else {
-                        eprintln!("PartialType failed! because of {}: {} as {}", stringify!(#field_names), stringify!(#field_types), actual_column_name);
-                        dbg!(&row);
-                        return None;
-                    };
+                    let #field_names = <<#field_types as silo::HasPartialRepresentation>::Partial>::try_from_row(string_storage, Some(actual_column_name), row, connection).unwrap_or_default();
                 )*
                 Some(Self {
                     #( #field_names),*
