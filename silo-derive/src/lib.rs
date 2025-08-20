@@ -1889,6 +1889,22 @@ fn create_partial<const IS_STRUCT: bool>(
         result
     });
 
+    let variant_pattern = Member::create_variant_pattern(variants, members);
+    let fields_per_variant_transpose = variants.iter().zip(&variant_pattern).map(|(v, p)| {
+        let mut result = quote!();
+        for member in members.iter().filter(|m| !m.is_skipped) {
+            if &member.variant == v {
+                let name = &member.name;
+
+                result = quote! {
+                #result
+                let #name = self.#name.transpose()?;};
+            }
+        }
+        result = quote!(#result Some(#name::#p));
+        result
+    });
+
     let from_impl = if IS_STRUCT {
         quote! {
             impl From<#name> for #partial_name {
@@ -1937,8 +1953,12 @@ fn create_partial<const IS_STRUCT: bool>(
             impl silo::PartialType<#name> for #partial_name {
                 fn transpose(self) -> Option<#name> {
                     let variant = self.variant?;
-                    // TODO: Select right variant here!
-                    None
+                    match variant.as_str() {
+                        #(stringify!(#variants) => {
+                            #fields_per_variant_transpose
+                        })*
+                        _ => None
+                    }
                 }
             }
         }
