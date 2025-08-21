@@ -14,6 +14,11 @@ use time::macros::format_description;
 use time::{Date, Time};
 use time::{OffsetDateTime, format_description::FormatItem};
 
+#[cfg(feature = "debug_sql")]
+pub const ENABLE_DEBUG_PRINTING: bool = true;
+#[cfg(not(feature = "debug_sql"))]
+pub const ENABLE_DEBUG_PRINTING: bool = false;
+
 #[cfg(test)]
 mod test {
     #[test]
