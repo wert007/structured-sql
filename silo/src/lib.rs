@@ -1062,9 +1062,7 @@ impl<T: RowType> FromRowType<Self> for T {
     }
 }
 
-pub trait FromRowType<T: RowType>:
-    MustBeEqual<T::Filtered> + Sized + HasPartialRepresentation
-{
+pub trait FromRowType<T: RowType>: Filterable + Sized + HasPartialRepresentation {
     fn from_row_type(value: Vec<T>) -> Vec<Self>;
 }
 
@@ -1123,7 +1121,8 @@ impl<T> ToRows<T> for Vec<T> {
 
 pub trait SqlTable<'a> {
     type RowType: RowType;
-    type ValueType: FromRowType<Self::RowType>;
+    type ValueType: FromRowType<Self::RowType>
+        + MustBeEqual<<Self::RowType as Filterable>::Filtered>;
     const INSERT_FAILURE_BEHAVIOR: SqlFailureBehavior;
     fn from_connection(
         connection: &'a Connection,
@@ -1160,7 +1159,10 @@ pub trait SqlTable<'a> {
             .into_iter()
             .filter_map(|r| {
                 if (callback)(&r) {
-                    self.delete(r.must_be_equal()).ok()?;
+                    let filter = <Self::ValueType as MustBeEqual<
+                        <Self::RowType as Filterable>::Filtered,
+                    >>::must_be_equal(&r);
+                    self.delete(filter).ok()?;
                     Some(r)
                 } else {
                     None

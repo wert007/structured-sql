@@ -760,12 +760,15 @@ impl Base {
             visibility,
             on_conflict,
             members,
+            has_vec_as_member,
             ..
         } = self;
-        let iterable_remaining_elements = members
+        let iterable_remaining_elements: Vec<_> = members
             .iter()
             .filter(|m| !m.is_skipped && !m.is_primary && m.has_vec())
-            .map(|m| format_ident!("{}_silo_remaining_elements", m.name));
+            .map(|m| format_ident!("{}_silo_remaining_elements", m.name))
+            .collect();
+
         quote! {
         #visibility struct #table_name<'a> {
             connection: &'a silo::rusqlite::Connection,
@@ -836,7 +839,7 @@ impl Base {
 
             fn filter(&self, filter: #filter_name) -> Result<Vec<#name>, silo::rusqlite::Error> {
                 use silo::IntoGenericFilter;
-                let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+                let mut generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
                 silo::query_table_filtered::<Self::RowType, Self::ValueType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic, Self::default_order())
             }
 
@@ -1590,6 +1593,8 @@ fn create_row_type(
 
     // let partial_normal_name = format_ident!("Partial{name}");
 
+    let normal_filter_name = format_ident!("Filter{name}");
+
     let partial_row_type_name = format_ident!("Partial{row_type_name}");
     quote! {
         #partial
@@ -1627,14 +1632,53 @@ fn create_row_type(
             #(#row_type_fields)*
         }
 
-        impl silo::Filterable for #name {
-            type Filtered = #filter_name;
+        #[repr(transparent)]
+        #[derive(Debug, Clone, Default)]
+        #visibility struct #normal_filter_name(#filter_name);
+
+        impl silo::IntoGenericFilter for #normal_filter_name {
+            fn into_generic(
+                self,
+                string_storage: &mut silo::StaticStringStorage,
+                column_name: Option<&'static str>,
+            ) -> silo::GenericFilter {
+                if !matches!(self.0.#primary_key_field, silo::SqlColumnFilter::Ignored) {
+                    // TODO: Ensure only primary_key field is set!!!
+                    self.0.into_generic(string_storage, column_name)
+                } else {
+                    todo!("Do a table look up here!")
+                }
+            }
+        }
+
+        impl silo::IntoSqlColumnFilter for #normal_filter_name {
+            fn into_sql_column_filter(
+                self,
+                name: &'static str,
+                string_storage: &mut silo::StaticStringStorage,
+            ) -> Vec<(&'static str, silo::SqlColumnFilter<silo::SqlValue>)> {
+                use silo::IntoSqlColumnFilter;
+                let mut result = Vec::new();
+                let column_name = string_storage.store(&[name, "_", stringify!(#primary_key_field)]);
+                result.extend(self.0.#primary_key_field.into_sql_column_filter(column_name, string_storage));
+                result
+            }
+        }
+
+        impl silo::MustBeEqual<#filter_name> for #name {
             fn must_be_equal(&self) -> #filter_name {
-                <#filter_name as Default>::default().#has_primary_key_field(self.#primary_key_field.clone())
+                #filter_name::default().#has_primary_key_field(self.#primary_key_field.clone())
+            }
+        }
+
+        impl silo::Filterable for #name {
+            type Filtered = #normal_filter_name;
+            fn must_be_equal(&self) -> #normal_filter_name {
+                #normal_filter_name(<#normal_filter_name as Default>::default().0.#has_primary_key_field(self.#primary_key_field.clone()))
             }
 
-            fn must_contain(&self) -> #filter_name {
-                <#filter_name as Default>::default()
+            fn must_contain(&self) -> #normal_filter_name {
+                <#normal_filter_name as Default>::default()
             }
         }
 
