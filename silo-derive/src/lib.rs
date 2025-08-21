@@ -1474,6 +1474,23 @@ fn create_row_type(
         .expect("Checked, that this exists")
         .type_;
     let has_primary_key_field = format_ident!("has_{primary_key_field}");
+    let has_fields: Vec<_> = field_names
+        .iter()
+        .map(|f| format_ident!("has_{f}"))
+        .collect();
+
+    let has_field_types: Vec<_> = members
+        .iter()
+        .filter(|m| !m.is_skipped)
+        .map(|m| {
+            let type_ = Member::try_strip_vec(&m.type_);
+            if Member::as_simple_type(type_, false).is_some() {
+                quote! { #type_}
+            } else {
+                quote! { <#type_ as silo::Filterable>::Filtered}
+            }
+        })
+        .collect();
 
     removed_fields_from_special_handling.extend(
         members
@@ -1635,6 +1652,15 @@ fn create_row_type(
         #[repr(transparent)]
         #[derive(Debug, Clone, Default)]
         #visibility struct #normal_filter_name(#filter_name);
+
+        impl #normal_filter_name {
+            #(
+                pub fn #has_fields(mut self, value: #has_field_types) -> Self {
+                    self.0 = self.0.#has_fields(value);
+                    self
+                }
+            )*
+        }
 
         impl silo::IntoGenericFilter for #normal_filter_name {
             fn into_generic(
