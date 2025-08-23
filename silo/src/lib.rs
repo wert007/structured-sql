@@ -600,6 +600,7 @@ impl Database {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum TableAlteration {
     InsertColumn(SqlColumn),
     ChangeType(usize, SqlColumnType),
@@ -645,30 +646,9 @@ fn compare_columns(actual: &[SqlColumn], expected: &[SqlColumn]) -> bool {
     return !necessary_alternations.is_empty();
 }
 
-pub trait AsRepeatedParams {
-    const PARAM_COUNT: usize;
-    fn as_params<'b>(&'b self) -> Vec<Vec<&'b dyn rusqlite::ToSql>>;
-}
-
 pub trait AsParams {
     const PARAM_COUNT: usize;
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
-}
-
-impl<T: AsParams> AsRepeatedParams for T {
-    const PARAM_COUNT: usize = T::PARAM_COUNT;
-
-    fn as_params<'b>(&'b self) -> Vec<Vec<&'b dyn rusqlite::ToSql>> {
-        vec![self.as_params()]
-    }
-}
-
-impl<T: AsParams> AsRepeatedParams for Vec<T> {
-    const PARAM_COUNT: usize = T::PARAM_COUNT;
-
-    fn as_params<'b>(&'b self) -> Vec<Vec<&'b dyn rusqlite::ToSql>> {
-        self.iter().map(|v| v.as_params()).collect()
-    }
 }
 
 impl<T: AsParams> AsParams for Option<T> {
@@ -961,7 +941,8 @@ pub trait HasValue {
     fn has_values(&self) -> bool;
 }
 
-pub trait HasPartialRepresentation<T = Self>: Sized {
+pub trait HasPartialRepresentation<T = Self>: Sized + Into<Self::Partial> {
+    // TODO: find out why we do not have partial type here!
     type Partial: HasValue + Default;
     // type Partial: PartialType<T>;
 }
@@ -1015,27 +996,6 @@ impl<T: FromRow> FromRow for Option<T> {
             None => Some(None),
         }
     }
-}
-
-pub trait FromGroupedRows: Sized {
-    type RowType: FromRow;
-    fn try_from_rows(
-        string_storage: &mut StaticStringStorage,
-        column_name: Option<&'static str>,
-        rows: Vec<Self::RowType>,
-    ) -> Option<Self>;
-}
-
-impl<T: FromRow> FromGroupedRows for Vec<T> {
-    fn try_from_rows(
-        string_storage: &mut StaticStringStorage,
-        column_name: Option<&'static str>,
-        rows: Vec<Self::RowType>,
-    ) -> Option<Self> {
-        Some(rows)
-    }
-
-    type RowType = T;
 }
 
 pub trait RowType: FromRow + AsParams + HasPartialRepresentation + Filterable {
@@ -1175,10 +1135,6 @@ pub trait SqlTable<'a> {
             })
             .collect::<Vec<_>>())
     }
-}
-
-pub trait FromRowWithPrimary: FromRow {
-    fn primary(&self) -> usize;
 }
 
 #[derive(Default, Clone, Debug)]

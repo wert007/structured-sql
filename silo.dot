@@ -1,0 +1,77 @@
+digraph {
+    node [fontname = Helvetica;];
+    // edge [len = 2.0;];
+    overlap = false;
+    splines = true;
+    // structs
+    Table [style = filled;fillcolor = orange;];
+    Struct [style = filled;fillcolor = yellow;fontsize = 24;];
+    RowTypeStruct;
+    PartialStruct [style = filled;fillcolor = yellow;];
+    PartialRowType;
+    StructFilter [style = filled;fillcolor = yellow;];
+    RowTypeFilter;
+    
+    // all traits as rectangles with italic labels
+    node [shape = rect;];
+    ToRowType [label = < <I>ToRowType</I> >;];
+    IntoSqlTable [label = < <I>IntoSqlTable</I> >;];
+    FromRowType [label = < <I>FromRowType</I> >;];
+    Partial1 [label = < <I>PartialType</I> >;];
+    MigrationHandler1 [label = < <I>MigrationHandler</I> >;];
+    HasPartialRepresentation1 [label = < <I>HasPartialRepresentation</I> >;];
+    // Into1 [label = < <I>Into</I> >;];
+    Filterable1 [label = < <I>Filterable MustBeEqual</I> >;];
+    // Filterable2 [label = < <I>Filterable MustBeEqual</I> >;];
+    PartialRT [label = < <I>PartialType</I> >;];
+    MigrationHandlerRT [label = < <I>MigrationHandler</I> >;];
+    HasPartialRepresentationRT [label = < <I>HasPartialRepresentation</I> >;];
+    // IntoRT [label = < <I>Into</I> >;];
+    FilterableRT [label = < <I>Filterable MustBeEqual</I> >;];
+    SqlTable [style = filled;fillcolor = lightgray;];
+    Default [style = filled;fillcolor = lightgray;];
+    HasValue [style = filled;fillcolor = lightgray;];
+    AsParams [style = filled;fillcolor = lightgray;];
+    RowType [style = filled;fillcolor = lightgray;];
+    FromRow [style = filled;fillcolor = lightgray;];
+    PartialRow [style = filled;fillcolor = lightgray;];
+    
+    Struct -> ToRowType -> RowTypeStruct;
+    Struct -> IntoSqlTable -> Table;
+    Table -> SqlTable;
+    RowTypeStruct -> FromRowType -> Struct;
+    Struct -> HasPartialRepresentation1 -> PartialStruct;
+    // Struct -> Into1 -> PartialStruct;
+    PartialStruct -> Partial1 -> Struct;
+    PartialStruct -> MigrationHandler1 -> Struct [len = 2.0;];
+    // RowTypeStruct -> IntoRT -> PartialRowType;
+    RowTypeStruct -> HasPartialRepresentationRT -> PartialRowType;
+    PartialRowType -> PartialRT -> RowTypeStruct;
+    PartialRowType -> MigrationHandlerRT -> RowTypeStruct;
+    Struct -> Filterable1 -> StructFilter;
+    PartialStruct -> Filterable1 [len = 2.0;];
+    RowTypeStruct -> FilterableRT;
+    FilterableRT -> RowTypeFilter [len = 2.0;];
+    PartialStruct -> Default;
+    PartialStruct -> HasValue;
+    PartialRowType -> Default;
+    PartialRowType -> HasValue;
+    RowTypeStruct -> AsParams;
+    RowTypeStruct -> RowType;
+    PartialRowType -> AsParams;
+    PartialRowType -> FromRow;
+    RowTypeStruct -> FromRow;
+    PartialStruct -> PartialRow [len = 2.0;];
+    PartialRowType -> PartialRow;
+    
+    subgraph {
+        Legend [pos = "0,-3!";shape = plaintext;label = <
+            <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="5">
+            <TR><TD BGCOLOR="yellow">Public facing struct</TD></TR>
+            <TR><TD>Internal struct</TD></TR>
+            <TR><TD><I>Transformative Trait</I></TD></TR>
+            <TR><TD BGCOLOR="lightgray">Marker Trait</TD></TR>
+            </TABLE>
+            >;];
+    }
+}
