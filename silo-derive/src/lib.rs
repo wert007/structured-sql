@@ -1741,7 +1741,6 @@ fn create_row_type(
 
                 let elements = table.filter(#filter_name::default().#has_primary_key_field(#primary_key_field.clone()));
                 if silo::ENABLE_DEBUG_PRINTING {
-
                     dbg!(&elements);
                 }
                 elements.ok()?.into_iter().next()
