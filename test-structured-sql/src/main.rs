@@ -1,3 +1,5 @@
+use std::any::type_name_of_val;
+
 use silo::{Database, IntoSqlTable, MigrationHandler, PartialType, SqlTable, StaticStringStorage};
 
 extern crate alloc;
@@ -14,7 +16,28 @@ struct Point {
 
 impl MigrationHandler for Point {}
 
-#[derive(Debug, IntoSqlTable, Clone, Default)]
+// #[derive(Default)]
+// struct FruitFilter2 {
+//     __silo_variant: <&'static str as silo::HasFilter>::Filter,
+// }
+
+// impl silo::IntoGenericFilter for FruitFilter2 {
+//     fn into_generic(
+//         self,
+//         string_storage: &mut silo::StaticStringStorage,
+//         column_name: Option<std::borrow::Cow<'static, str>>,
+//     ) -> silo::GenericFilter {
+//         let mut result = silo::GenericFilter::default();
+//         result.insert(
+//             stringify!(__silo_variant).into(),
+//             self.__silo_variant,
+//             string_storage,
+//         );
+//         result
+//     }
+// }
+
+#[derive(Debug, silo::ToRows, Clone, Default)]
 enum Fruit {
     #[default]
     Apple,
@@ -23,14 +46,14 @@ enum Fruit {
     Strawberry,
 }
 
-#[derive(Debug, IntoSqlTable, Clone)]
+#[derive(Debug, silo::ToRows, Clone)]
 enum FruitWithData {
     Apple(f32),
     Pear,
     Banana { ripeness: String },
 }
 
-#[derive(Debug, IntoSqlTable, Clone)]
+#[derive(Debug, silo::Table, Clone)]
 #[silo(migrate)]
 struct Test {
     #[silo(primary)]
@@ -51,26 +74,21 @@ impl MigrationHandler for Test {
         connection: &silo::rusqlite::Connection,
     ) -> Option<Self> {
         use silo::FromRow;
-        let age = u32::try_from_row(string_storage, Some("age"), row, connection).map(|v| v as f64);
+        let age = u32::try_from_row(string_storage, Some("age".into()), row, connection)
+            .map(|v| v as f64);
         partial.age.get_or_insert(age.unwrap_or(55.2));
         partial.transpose()
     }
 }
 
-#[derive(Debug, Clone, IntoSqlTable)]
-pub enum VideoUrl {
-    Direct(String),
-    Blob(String),
-}
-
-#[derive(Default, Debug, Clone, IntoSqlTable)]
+#[derive(Default, Debug, Clone, silo_derive::ToRows)]
 pub enum Availability {
     Now {
-        player_url: String,
-        video_url: VideoUrl,
+        video_url: String,
     },
     #[default]
     Later,
+    Missed,
 }
 
 #[derive(Default, Debug, Clone, IntoSqlTable)]
@@ -78,11 +96,9 @@ pub enum Availability {
 pub struct Movie {
     #[silo(primary)]
     title: String,
-    url: Vec<String>,
+    url: String,
     available: Availability,
 }
-
-impl silo::MigrationHandler for MovieRowType {}
 
 impl silo::MigrationHandler for Movie {
     fn migrate(
@@ -171,7 +187,7 @@ impl MigrationHandler for TmdbMovie {
         // if partial.release_date.is_none() {
         //     partial.release_date = Some(time::OffsetDateTime::now_utc());
         // }
-        partial.transpose()
+        Some(partial.transpose().expect("No failure"))
     }
 }
 
@@ -180,7 +196,9 @@ pub struct FutureMovie {
     pub url: String,
 }
 
-#[derive(Default, Clone, Debug, IntoSqlTable)]
+#[derive(Default, Clone, Debug)]
+// TODO: Foreign keys and shit!
+// #[derive(Default, Clone, Debug, IntoSqlTable)]
 pub struct MovieWithRatings {
     pub(crate) movie: Movie,
     pub(crate) ratings: TmdbMovie,
@@ -192,41 +210,8 @@ pub struct MovieWithRatings {
 // const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
 // const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 
-#[derive(Debug, IntoSqlTable, Clone)]
-struct FooWithVec {
-    #[silo(primary)]
-    the_id: usize,
-    values_todo_keywords: Vec<String>,
-    little_list: Vec<u32>,
-    non_vec_field: String,
-}
-
-#[derive(Debug, IntoSqlTable, Clone)]
-struct HasFooWithVecAsChild {
-    child: FooWithVec,
-    dummy_value: String,
-}
-
 fn main() {
-    dbg!(Test::COLUMNS);
     let test_db = Database::create_in_memory().unwrap();
-    let foo_with_vec = test_db.load::<HasFooWithVecAsChild>().unwrap();
-    foo_with_vec
-        .insert(HasFooWithVecAsChild {
-            child: FooWithVec {
-                the_id: 31,
-                values_todo_keywords: vec!["hello".into(), "world".into(), "test".into()],
-                little_list: vec![42, 43, 44, 45, 46, 47, 48, 49, 421, 422, 423],
-                non_vec_field: "Do not duplicate data needlessly".into(),
-            },
-            dummy_value: "I just think they are neat!".into(),
-        })
-        .unwrap();
-    test_db.save("table-with-vecs.db").unwrap();
-    let result = foo_with_vec
-        .filter(HasFooWithVecAsChildFilter::default())
-        .unwrap();
-    dbg!(result);
     let test_db = Database::open("test-before.db").unwrap();
     test_db.check::<Test>().unwrap();
     // test_db.save("test-before.db").unwrap();
