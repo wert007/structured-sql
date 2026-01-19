@@ -5,6 +5,6 @@ pub(crate) fn create_row_type(
 ) -> proc_macro2::TokenStream {
     let name = &base_struct.name;
     quote! {
-        impl silo::RowType for #name {}
+        // impl silo::RowType for #name {}
     }
 }

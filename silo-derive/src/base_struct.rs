@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     attributes::{self, AttributeFieldData},
     error::{self, Error, ErrorKind},
@@ -150,9 +152,12 @@ impl ToTokens for ColumnData<'_> {
         let name = syn::LitStr::new(&self.name, self.span);
         let is_primary = syn::LitBool::new(self.is_primary, self.span);
         let is_unique = syn::LitBool::new(self.is_unique, self.span);
-        let iter = if is_simple_type(type_) {
+        let iter = if let Some(column_type) = has_column_type(type_) {
             quote_spanned! {self.span=>
-                [silo::SqlColumn::new::<#type_>(#name, #is_primary, #is_unique)]
+                [silo::SqlColumn {
+                    name: #name.into(), is_primary: #is_primary, is_unique: #is_unique,
+                    r#type: #column_type,
+                }]
             }
         } else {
             let type_name = type_.to_name().unwrap_or_else(|| {
@@ -164,7 +169,7 @@ impl ToTokens for ColumnData<'_> {
             let mut macro_name = format_ident!("create_columns_with_prefix_for_{type_name}");
             macro_name.set_span(self.span);
             quote_spanned! {self.span=>
-                <#type_ as silo::IntoSqlTable>::columns().into_iter().map(|mut c| {
+                <#type_ as silo::ToColumns>::columns().into_iter().map(|mut c| {
                     c.name = format!("{}_{}",#name, &c.name).into();
                     c
                 })
@@ -175,24 +180,60 @@ impl ToTokens for ColumnData<'_> {
 }
 
 fn is_simple_type(type_: &Type) -> bool {
-    const SUPPORTED_SIMPLE_TYPES: [&'static str; 27] = [
-        "r#bool", "r#i8", "r#i16", "r#i32", "r#i64", "r#i128", "r#u8", "r#u16", "r#u32", "r#u64",
-        "r#u128", "r#f32", "r#f64", "bool", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32",
-        "u64", "u128", "f32", "f64", "String",
-    ];
+    has_column_type(type_).is_some()
+}
+
+fn has_column_type(type_: &Type) -> Option<TokenStream> {
+    let supported_simple_types: HashMap<&'static str, TokenStream> = [
+        ("r#bool", quote! { silo::SqlColumnType::Integer }),
+        ("r#i8", quote! { silo::SqlColumnType::Integer }),
+        ("r#i16", quote! { silo::SqlColumnType::Integer }),
+        ("r#i32", quote! { silo::SqlColumnType::Integer }),
+        ("r#i64", quote! { silo::SqlColumnType::Integer }),
+        ("r#i128", quote! { silo::SqlColumnType::Integer }),
+        ("r#u8", quote! { silo::SqlColumnType::Integer }),
+        ("r#u16", quote! { silo::SqlColumnType::Integer }),
+        ("r#u32", quote! { silo::SqlColumnType::Integer }),
+        ("r#u64", quote! { silo::SqlColumnType::Integer }),
+        ("r#u128", quote! { silo::SqlColumnType::Integer }),
+        ("r#f32", quote! { silo::SqlColumnType::Float }),
+        ("r#f64", quote! { silo::SqlColumnType::Float }),
+        ("bool", quote! { silo::SqlColumnType::Integer }),
+        ("i8", quote! { silo::SqlColumnType::Integer }),
+        ("i16", quote! { silo::SqlColumnType::Integer }),
+        ("i32", quote! { silo::SqlColumnType::Integer }),
+        ("i64", quote! { silo::SqlColumnType::Integer }),
+        ("i128", quote! { silo::SqlColumnType::Integer }),
+        ("u8", quote! { silo::SqlColumnType::Integer }),
+        ("u16", quote! { silo::SqlColumnType::Integer }),
+        ("u32", quote! { silo::SqlColumnType::Integer }),
+        ("u64", quote! { silo::SqlColumnType::Integer }),
+        ("u128", quote! { silo::SqlColumnType::Integer }),
+        ("f32", quote! { silo::SqlColumnType::Float }),
+        ("f64", quote! { silo::SqlColumnType::Float }),
+        ("String", quote! { silo::SqlColumnType::Text }),
+    ]
+    .into_iter()
+    .collect();
     match type_ {
-        Type::Group(type_group) => is_simple_type(&type_group.elem),
-        Type::Paren(type_paren) => is_simple_type(&type_paren.elem),
+        Type::Group(type_group) => has_column_type(&type_group.elem),
+        Type::Paren(type_paren) => has_column_type(&type_paren.elem),
         Type::Path(type_path) => {
             let Some(name) = type_path.path.segments.iter().last() else {
-                return false;
+                return None;
             };
-            name.arguments.is_empty()
-                && SUPPORTED_SIMPLE_TYPES.contains(&name.ident.to_string().as_str())
+            name.arguments
+                .is_empty()
+                .then(|| {
+                    supported_simple_types
+                        .get(&name.ident.to_string().as_str())
+                        .cloned()
+                })
+                .flatten()
         }
         // Type::Ptr(type_ptr) => todo!(),
         // Type::Reference(type_reference) => todo!(),
-        _ => false,
+        _ => None,
     }
 }
 

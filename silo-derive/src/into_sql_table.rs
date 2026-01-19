@@ -11,7 +11,7 @@ pub(crate) fn create_into_sql_table(
     let columns = base_struct.columns();
 
     quote! {
-        impl<'a> silo::IntoSqlTable<'a> for #name {
+        impl<'a> silo::ToTable<'a> for #name {
             type Table = #table_name<'a>;
             const NAME: &'static str = stringify!(#name);
             // const COLUMNS: &'static [silo::SqlColumn] = silo::concat_sql_columns!(&[#(#columns,)*]);

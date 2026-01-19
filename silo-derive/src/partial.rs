@@ -45,11 +45,11 @@ pub(crate) fn create_partial_for(
 
         #into
 
-        impl silo::HasValue for #partial_name {
-            fn has_values(&self) -> bool {
-                #(self.#field_names.has_values() ||)* false
-            }
-        }
+        // impl silo::HasValue for #partial_name {
+        //     fn has_values(&self) -> bool {
+        //         #(self.#field_names.has_values() ||)* false
+        //     }
+        // }
 
         impl silo::PartialRow for #partial_name {
             fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {

@@ -17,7 +17,9 @@ pub(crate) fn create_from_row_for_base_struct(
         create_try_from_row_body(base_struct)
     } else {
         let partial = base_struct.partial_name();
-        quote!(#partial::try_from_row(string_storage, column_name, row, connection)?.transpose())
+        quote!(
+            use silo::PartialType;
+            #partial::try_from_row(string_storage, column_name, row, connection)?.transpose())
     };
     let iter = quote! {
         impl silo::FromRow for #name {

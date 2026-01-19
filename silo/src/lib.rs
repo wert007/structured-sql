@@ -8,10 +8,12 @@ use std::{
 
 pub use rusqlite;
 use rusqlite::{Connection, types::Null};
-pub use silo_derive::IntoSqlTable;
 
 pub use konst;
-pub mod derive;
+pub mod derive {
+    pub use silo_derive::ToTable;
+}
+
 use time::macros::format_description;
 use time::{Date, Time};
 use time::{OffsetDateTime, format_description::FormatItem};
@@ -31,8 +33,8 @@ mod test {
             x: 430.0,
             y: 13324.3124,
         })?;
-        let coords = coords.filter(CoordFilter::default().y_should_be(13324.3124))?;
-        assert_eq!(coords.as_slice(), &[]);
+        // let coords = coords.filter(CoordFilter::default().y_should_be(13324.3124))?;
+        // assert_eq!(coords.as_slice(), &[]);
         Ok(())
     }
     use std::{
@@ -45,22 +47,15 @@ mod test {
     use rusqlite::{Connection, OptionalExtension};
 
     use crate::{
-        AsParams, Database, FromRow, GenericFilter, GenericOrder, HasColumnCount, HasFilter,
-        HasPartial, HasValue, IntoGenericFilter, IntoSqlTable, MigrationHandler, PartialType,
-        RowType, SqlColumn, SqlColumnFilter, SqlColumnType, SqlTable, StaticStringStorage, ToRows,
-        handle_migration,
+        AsParams, Database, FromRow, GenericFilter, HasColumnCount, HasPartial, IntoGenericFilter,
+        MigrationHandler, PartialType, SqlColumn, SqlColumnType, SqlTable, StaticStringStorage,
+        ToTable, handle_migration,
     };
 
     #[derive(Debug, PartialEq)]
     struct Coord {
         x: f64,
         y: f64,
-    }
-
-    impl ToRows<Coord> for Coord {
-        fn to_rows(self) -> Vec<Coord> {
-            vec![self]
-        }
     }
 
     #[derive(Debug, PartialEq, Default)]
@@ -98,47 +93,6 @@ mod test {
         }
     }
 
-    impl HasValue for PartialCoord {
-        fn has_values(&self) -> bool {
-            self.x.has_values() || self.y.has_values()
-        }
-    }
-
-    #[derive(Default)]
-    struct CoordFilter {
-        x: Option<SqlColumnFilter<f64>>,
-        y: Option<SqlColumnFilter<f64>>,
-    }
-
-    impl CoordFilter {
-        pub fn x_should_be(mut self, x: f64) -> Self {
-            self.x = Some(SqlColumnFilter::MustBeEqual(x));
-            self
-        }
-
-        pub fn y_should_be(mut self, y: f64) -> Self {
-            self.y = Some(SqlColumnFilter::MustBeEqual(y));
-            self
-        }
-    }
-
-    impl IntoGenericFilter for CoordFilter {
-        fn into_generic(
-            self,
-            _string_storage: &mut StaticStringStorage,
-            _column_name: Option<Cow<'static, str>>,
-        ) -> GenericFilter {
-            let mut columns = HashMap::new();
-            if let Some(x) = self.x {
-                columns.insert("x".into(), x.into_generic());
-            }
-            if let Some(y) = self.y {
-                columns.insert("y".into(), y.into_generic());
-            }
-            GenericFilter { columns }
-        }
-    }
-
     impl FromRow for Coord {
         fn try_from_row(
             _string_storage: &mut StaticStringStorage,
@@ -168,25 +122,7 @@ mod test {
         type Partial = PartialCoord;
     }
 
-    impl HasFilter for Coord {
-        type Filter = CoordFilter;
-
-        fn must_be_equal(&self) -> Self::Filter {
-            CoordFilter::default()
-                .x_should_be(self.x)
-                .y_should_be(self.y)
-        }
-
-        fn must_contain(&self) -> Self::Filter {
-            CoordFilter::default()
-                .x_should_be(self.x)
-                .y_should_be(self.y)
-        }
-    }
-
-    impl RowType for Coord {}
-
-    impl<'a> IntoSqlTable<'a> for Coord {
+    impl<'a> ToTable<'a> for Coord {
         type Table = CoordTable<'a>;
 
         const NAME: &'static str = "CoordTable";
@@ -216,7 +152,7 @@ mod test {
         type RowType = Coord;
         type ValueType = Coord;
 
-        fn insert(&self, row: impl ToRows<Self::RowType>) -> Result<(), rusqlite::Error> {
+        fn insert(&self, row: Self::RowType) -> Result<(), rusqlite::Error> {
             let columns = Self::RowType::columns().into_iter().map(|c| c.name).fold(
                 String::new(),
                 |mut acc, cur| {
@@ -246,26 +182,24 @@ mod test {
                 "INSERT OR IGNORE INTO {} ({columns}) VALUES ({values})",
                 Self::RowType::NAME
             ))?;
-            for row in row.to_rows() {
-                stmt.execute(row.as_params().as_slice())?;
-            }
+            stmt.execute(row.as_params().as_slice())?;
             Ok(())
         }
 
-        fn filter(&self, filter: CoordFilter) -> Result<Vec<Coord>, rusqlite::Error> {
-            let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-            crate::query_table_filtered::<Self::RowType, Self::ValueType>(
-                &self.connection,
-                &mut self.string_storage.lock().unwrap(),
-                generic,
-                GenericOrder::default(),
-            )
-        }
+        // fn filter(&self, filter: CoordFilter) -> Result<Vec<Coord>, rusqlite::Error> {
+        //     let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+        //     crate::query_table_filtered::<Self::RowType, Self::ValueType>(
+        //         &self.connection,
+        //         &mut self.string_storage.lock().unwrap(),
+        //         generic,
+        //         GenericOrder::default(),
+        //     )
+        // }
 
-        fn delete(&self, filter: CoordFilter) -> Result<usize, rusqlite::Error> {
-            let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
-            crate::delete_table_filtered::<Self::RowType>(&self.connection, generic)
-        }
+        // fn delete(&self, filter: CoordFilter) -> Result<usize, rusqlite::Error> {
+        //     let generic = filter.into_generic(&mut self.string_storage.lock().unwrap(), None);
+        //     crate::delete_table_filtered::<Self::RowType>(&self.connection, generic)
+        // }
 
         fn from_connection(
             connection: &'a Connection,
@@ -280,21 +214,21 @@ mod test {
         const INSERT_FAILURE_BEHAVIOR: crate::SqlFailureBehavior =
             crate::SqlFailureBehavior::Ignore;
 
-        fn update(
-            &self,
-            filter: CoordFilter,
-            updated: PartialCoord,
-        ) -> Result<(), rusqlite::Error> {
-            Err(rusqlite::Error::InvalidQuery)
-        }
+        // fn update(
+        //     &self,
+        //     filter: CoordFilter,
+        //     updated: PartialCoord,
+        // ) -> Result<(), rusqlite::Error> {
+        //     Err(rusqlite::Error::InvalidQuery)
+        // }
 
-        fn migrate(&self, actual_columns: &[SqlColumn]) -> Result<(), rusqlite::Error> {
-            handle_migration::<Self::RowType>(
-                self.connection,
-                &mut self.string_storage.lock().unwrap(),
-                actual_columns,
-            )
-        }
+        // fn migrate(&self, actual_columns: &[SqlColumn]) -> Result<(), rusqlite::Error> {
+        //     handle_migration::<Self::RowType>(
+        //         self.connection,
+        //         &mut self.string_storage.lock().unwrap(),
+        //         actual_columns,
+        //     )
+        // }
     }
 }
 
@@ -306,7 +240,7 @@ pub trait EnumHelper {
     fn variant_ref(&self) -> &'static &'static str;
 }
 
-pub fn handle_migration<T: for<'a> IntoSqlTable<'a> + MigrationHandler + RowType>(
+pub fn handle_migration<T: for<'a> ToTable<'a> + MigrationHandler>(
     connection: &rusqlite::Connection,
     string_storage: &mut StaticStringStorage,
     actual_columns: &[SqlColumn],
@@ -494,7 +428,7 @@ impl Database {
         self.connection.backup("main", path, None)?;
         Ok(())
     }
-    pub fn load<'a, T: IntoSqlTable<'a>>(&'a self) -> rusqlite::Result<T::Table> {
+    pub fn load<'a, T: ToTable<'a>>(&'a self) -> rusqlite::Result<T::Table> {
         self.create::<T>()?;
 
         Ok(T::Table::from_connection(
@@ -507,7 +441,7 @@ impl Database {
         // }
     }
 
-    fn create<'a, T: IntoSqlTable<'a>>(&'a self) -> Result<(), rusqlite::Error> {
+    fn create<'a, T: ToTable<'a>>(&'a self) -> Result<(), rusqlite::Error> {
         if self.connection.table_exists(None, T::NAME)? {
             return Ok(());
         }
@@ -538,7 +472,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn check<'a, T: IntoSqlTable<'a>>(&'a self) -> Result<(), rusqlite::Error> {
+    pub fn check<'a, T: ToTable<'a>>(&'a self) -> Result<(), rusqlite::Error> {
         let mut columns = vec![];
         #[cfg(feature = "debug_sql")]
         {
@@ -601,7 +535,8 @@ impl Database {
         }
         if compare_columns(&columns, &T::columns()) {
             let table = self.load::<T>()?;
-            table.migrate(&columns)?;
+            todo!()
+            // table.migrate(&columns)?;
         }
 
         Ok(())
@@ -675,47 +610,8 @@ macro_rules! impl_as_params {
             const COLUMN_COUNT: usize = 1;
         }
 
-        impl RowType for $t {
-            fn insert_into_connected_foreign_tables(
-                self,
-                is_top_level: bool,
-                _: &rusqlite::Connection,
-            ) -> rusqlite::Result<()> {
-                Ok(())
-            }
-        }
-
         impl HasPartial for $t {
             type Partial = Option<$t>;
-        }
-        impl IntoGenericFilter for SqlColumnFilter<$t> {
-            fn into_generic(
-                self,
-                string_storage: &mut StaticStringStorage,
-                column_name: Option<Cow<'static, str>>,
-            ) -> GenericFilter {
-                GenericFilter {
-                    columns: self
-                        .into_sql_column_filter(
-                            column_name.expect("has no sub columns, so it needs a column name"),
-                            string_storage,
-                        )
-                        .into_iter()
-                        .collect(),
-                }
-            }
-        }
-
-        impl HasFilter for $t {
-            type Filter = SqlColumnFilter<$t>;
-
-            fn must_be_equal(&self) -> Self::Filter {
-                SqlColumnFilter::MustBeEqual(self.clone())
-            }
-
-            fn must_contain(&self) -> Self::Filter {
-                SqlColumnFilter::Contains(self.clone())
-            }
         }
 
         impl AsParams for $t {
@@ -735,16 +631,6 @@ macro_rules! impl_as_params {
                     .ok()
             }
         }
-
-        impl IntoSqlColumnFilter for $t {
-            fn into_sql_column_filter(
-                self,
-                name: Cow<'static, str>,
-                _string_storage: &mut StaticStringStorage,
-            ) -> Vec<(Cow<'static, str>, SqlColumnFilter<SqlValue>)> {
-                vec![(name, SqlColumnFilter::MustBeEqual(self).into_generic())]
-            }
-        }
     };
 }
 
@@ -754,47 +640,8 @@ macro_rules! impl_as_params_and_nan_is_none {
             const COLUMN_COUNT: usize = 1;
         }
 
-        impl RowType for $t {
-            fn insert_into_connected_foreign_tables(
-                self,
-                _is_top_level: bool,
-                _: &rusqlite::Connection,
-            ) -> rusqlite::Result<()> {
-                Ok(())
-            }
-        }
-
         impl HasPartial for $t {
             type Partial = Option<$t>;
-        }
-        impl IntoGenericFilter for SqlColumnFilter<$t> {
-            fn into_generic(
-                self,
-                string_storage: &mut StaticStringStorage,
-                column_name: Option<Cow<'static, str>>,
-            ) -> GenericFilter {
-                GenericFilter {
-                    columns: self
-                        .into_sql_column_filter(
-                            column_name.expect("has no sub columns, so it needs a column name"),
-                            string_storage,
-                        )
-                        .into_iter()
-                        .collect(),
-                }
-            }
-        }
-
-        impl HasFilter for $t {
-            type Filter = SqlColumnFilter<$t>;
-
-            fn must_be_equal(&self) -> Self::Filter {
-                SqlColumnFilter::MustBeEqual(self.clone())
-            }
-
-            fn must_contain(&self) -> Self::Filter {
-                SqlColumnFilter::Contains(self.clone())
-            }
         }
 
         impl AsParams for $t {
@@ -817,59 +664,13 @@ macro_rules! impl_as_params_and_nan_is_none {
                 )
             }
         }
-
-        impl IntoSqlColumnFilter for $t {
-            fn into_sql_column_filter(
-                self,
-                name: Cow<'static, str>,
-                _string_storage: &mut StaticStringStorage,
-            ) -> Vec<(Cow<'static, str>, SqlColumnFilter<SqlValue>)> {
-                vec![(name, SqlColumnFilter::MustBeEqual(self).into_generic())]
-            }
-        }
     };
 }
 
 macro_rules! impl_as_params_and_column_filter {
     ($t:ty) => {
-        impl<'a> IntoGenericFilter for $t {
-            fn into_generic(
-                self,
-                string_storage: &mut StaticStringStorage,
-                column_name: Option<Cow<'static, str>>,
-            ) -> GenericFilter {
-                GenericFilter {
-                    columns: SqlColumnFilter::MustBeEqual(self)
-                        .into_sql_column_filter(
-                            column_name.expect("has no sub columns, so it needs a column name"),
-                            string_storage,
-                        )
-                        .into_iter()
-                        .collect(),
-                }
-            }
-        }
-
         impl<'a> HasPartial for $t {
             type Partial = Option<$t>;
-        }
-
-        impl<'a> IntoGenericFilter for SqlColumnFilter<$t> {
-            fn into_generic(
-                self,
-                string_storage: &mut StaticStringStorage,
-                column_name: Option<Cow<'static, str>>,
-            ) -> GenericFilter {
-                GenericFilter {
-                    columns: self
-                        .into_sql_column_filter(
-                            column_name.expect("has no sub columns, so it needs a column name"),
-                            string_storage,
-                        )
-                        .into_iter()
-                        .collect(),
-                }
-            }
         }
 
         impl<'a> HasColumnCount for $t {
@@ -903,19 +704,11 @@ impl_as_params_and_nan_is_none!(f64);
 impl_as_params!(String);
 impl_as_params_and_column_filter!(&'a str);
 
-pub trait HasSqlColumnType {
-    const SQL_COLUMN_TYPE: SqlColumnType;
-}
-
-impl<T: HasSqlColumnType> HasSqlColumnType for Option<T> {
-    const SQL_COLUMN_TYPE: SqlColumnType = SqlColumnType::to_optional(T::SQL_COLUMN_TYPE);
-}
-
 macro_rules! related_sql_column_type {
     ($v:path, $t:ty) => {
-        impl HasSqlColumnType for $t {
-            const SQL_COLUMN_TYPE: SqlColumnType = $v;
-        }
+        // impl HasSqlColumnType for $t {
+        //     const SQL_COLUMN_TYPE: SqlColumnType = $v;
+        // }
     };
 }
 
@@ -956,60 +749,10 @@ impl<T> PartialType<T> for Option<T> {
     }
 }
 
-// impl<T> PartialType<Option<T>> for Option<Option<T>>
-// // where
-// //     Option<T>: PartialType<T>,
-// {
-//     fn transpose(self) -> Option<Option<T>> {
-//         self
-//     }
-// }
-
-impl<T> PartialType<Vec<T>> for Vec<T> {
-    fn transpose(self) -> Option<Vec<T>> {
-        if self.is_empty() {
-            Some(Vec::new())
-        } else {
-            let mut result = Vec::with_capacity(self.len());
-            for s in self {
-                result.push(s);
-            }
-            Some(result)
-        }
-    }
-}
-
-pub trait HasValue {
-    fn has_values(&self) -> bool;
-}
-
 pub trait HasPartial<T = Self>: Sized + Into<Self::Partial> {
     // TODO: find out why we do not have partial type here!
-    type Partial: HasValue + Default;
+    type Partial: Default;
     // type Partial: PartialType<T>;
-}
-
-impl<T> HasValue for Option<T> {
-    fn has_values(&self) -> bool {
-        self.is_some()
-    }
-}
-
-impl<T: HasValue + Default> HasPartial for T {
-    type Partial = Option<T>;
-}
-
-// impl<T: HasPartialRepresentation> HasPartialRepresentation for Option<T>
-// // where
-// //     Option<<T as HasPartialRepresentation>::Partial>: From<Option<T>>,
-// {
-//     type Partial = Option<T::Partial>;
-// }
-
-impl<T> HasValue for Vec<T> {
-    fn has_values(&self) -> bool {
-        !self.is_empty()
-    }
 }
 
 pub trait MigrationHandler: Sized + HasPartial
@@ -1026,6 +769,7 @@ where
     }
 }
 
+// TODO: Is this right? Kind of depends on the reason of failure, doesn't it?
 impl<T: FromRow> FromRow for Option<T> {
     fn try_from_row(
         string_storage: &mut StaticStringStorage,
@@ -1040,43 +784,6 @@ impl<T: FromRow> FromRow for Option<T> {
     }
 }
 
-pub trait RowType: FromRow + AsParams + HasPartial + HasFilter {
-    fn insert_into_connected_foreign_tables(
-        self,
-        is_top_level: bool,
-        connection: &rusqlite::Connection,
-    ) -> rusqlite::Result<()> {
-        Ok(())
-    }
-}
-
-impl<T: RowType> RowType for Option<T> {
-    fn insert_into_connected_foreign_tables(
-        self,
-        is_top_level: bool,
-        connection: &rusqlite::Connection,
-    ) -> rusqlite::Result<()> {
-        if let Some(it) = self {
-            it.insert_into_connected_foreign_tables(is_top_level, connection)?;
-        }
-        Ok(())
-    }
-}
-
-impl<T: RowType> FromRowType<Self> for T {
-    fn from_row_type(value: Vec<Self>) -> Vec<Self> {
-        value
-    }
-}
-
-pub trait FromRowType<T: RowType>: HasFilter + Sized + HasPartial {
-    fn from_row_type(value: Vec<T>) -> Vec<Self>;
-}
-
-pub trait MustBeEqual<T: IntoGenericFilter> {
-    fn must_be_equal(&self) -> T;
-}
-
 pub trait HasColumnCount {
     const COLUMN_COUNT: usize;
 }
@@ -1085,7 +792,7 @@ impl<T: HasColumnCount> HasColumnCount for Option<T> {
     const COLUMN_COUNT: usize = T::COLUMN_COUNT;
 }
 
-pub trait IntoSqlTable<'a>: HasColumnCount {
+pub trait ToTable<'a>: HasColumnCount + AsParams + FromRow {
     const NAME: &'static str;
     type Table: SqlTable<'a>;
 
@@ -1098,7 +805,23 @@ pub trait IntoSqlTable<'a>: HasColumnCount {
     fn fill_columns(columns: &mut Vec<SqlColumn>);
 }
 
-impl<'a, T: IntoSqlTable<'a>> IntoSqlTable<'a> for Option<T>
+#[diagnostic::on_unimplemented(
+    message = "ToColumns is not implemented for `{Self}`",
+    label = "My Label",
+    note = "You can either add an primary_key or derive ToColumns.",
+    note = "Read documentation on ToColumns for more information."
+)]
+pub trait ToColumns: HasColumnCount + AsParams + FromRow {
+    fn columns() -> Vec<SqlColumn> {
+        let mut result = Vec::with_capacity(Self::COLUMN_COUNT);
+        Self::fill_columns(&mut result);
+        result
+    }
+
+    fn fill_columns(columns: &mut Vec<SqlColumn>);
+}
+
+impl<'a, T: ToTable<'a>> ToTable<'a> for Option<T>
 // where
 //     Option<<T as HasPartialRepresentation>::Partial>: From<Option<T>>,
 {
@@ -1133,209 +856,116 @@ impl Display for SqlFailureBehavior {
     }
 }
 
-pub trait ToRows<T> {
-    fn to_rows(self) -> Vec<T>;
-}
-
-impl<T> ToRows<T> for Vec<T> {
-    fn to_rows(self) -> Vec<T> {
-        self
-    }
-}
-
 pub trait SqlTable<'a> {
-    type RowType: RowType;
-    type ValueType: FromRowType<Self::RowType> + MustBeEqual<<Self::RowType as HasFilter>::Filter>;
+    type RowType;
+    type ValueType;
     const INSERT_FAILURE_BEHAVIOR: SqlFailureBehavior;
     fn from_connection(
         connection: &'a Connection,
         string_storage: Arc<Mutex<StaticStringStorage>>,
     ) -> Self;
-    fn filter(
-        &self,
-        filter: <Self::RowType as HasFilter>::Filter,
-    ) -> Result<Vec<Self::ValueType>, rusqlite::Error>;
-    fn delete(
-        &self,
-        filter: <Self::RowType as HasFilter>::Filter,
-    ) -> Result<usize, rusqlite::Error>;
+    // fn filter(
+    //     &self,
+    //     filter: <Self::RowType as HasFilter>::Filter,
+    // ) -> Result<Vec<Self::ValueType>, rusqlite::Error>;
+    // fn delete(
+    //     &self,
+    //     filter: <Self::RowType as HasFilter>::Filter,
+    // ) -> Result<usize, rusqlite::Error>;
 
-    fn insert(&self, row: impl ToRows<Self::RowType>) -> Result<(), rusqlite::Error>;
-    fn update(
-        &self,
-        filter: <Self::RowType as HasFilter>::Filter,
-        updated: <Self::ValueType as HasPartial>::Partial,
-    ) -> Result<(), rusqlite::Error>;
-    fn count(
-        &self,
-        filter: <Self::RowType as HasFilter>::Filter,
-    ) -> Result<usize, rusqlite::Error> {
-        Ok(self.filter(filter)?.len())
-    }
-    fn migrate(&self, actual_columns: &[SqlColumn]) -> Result<(), rusqlite::Error>;
-    fn drain(
-        &self,
-        mut callback: impl FnMut(&Self::ValueType) -> bool,
-    ) -> Result<Vec<Self::ValueType>, rusqlite::Error> {
-        Ok(self
-            .filter(Default::default())?
-            .into_iter()
-            .filter_map(|r| {
-                if (callback)(&r) {
-                    let filter = <Self::ValueType as MustBeEqual<
-                        <Self::RowType as HasFilter>::Filter,
-                    >>::must_be_equal(&r);
-                    self.delete(filter).ok()?;
-                    Some(r)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>())
-    }
+    fn insert(&self, row: Self::RowType) -> Result<(), rusqlite::Error>;
+    // fn update(
+    //     &self,
+    //     filter: <Self::RowType as HasFilter>::Filter,
+    //     updated: <Self::ValueType as HasPartial>::Partial,
+    // ) -> Result<(), rusqlite::Error>;
+    // fn count(
+    //     &self,
+    //     filter: <Self::RowType as HasFilter>::Filter,
+    // ) -> Result<usize, rusqlite::Error> {
+    //     Ok(self.filter(filter)?.len())
+    // }
+    // fn migrate(&self, actual_columns: &[SqlColumn]) -> Result<(), rusqlite::Error>;
+    // fn drain(
+    //     &self,
+    //     mut callback: impl FnMut(&Self::ValueType) -> bool,
+    // ) -> Result<Vec<Self::ValueType>, rusqlite::Error> {
+    //     Ok(self
+    //         .filter(Default::default())?
+    //         .into_iter()
+    //         .filter_map(|r| {
+    //             if (callback)(&r) {
+    //                 let filter = <Self::ValueType as MustBeEqual<
+    //                     <Self::RowType as HasFilter>::Filter,
+    //                 >>::must_be_equal(&r);
+    //                 self.delete(filter).ok()?;
+    //                 Some(r)
+    //             } else {
+    //                 None
+    //             }
+    //         })
+    //         .collect::<Vec<_>>())
+    // }
 }
 
-#[derive(Default, Clone, Debug)]
-pub enum SqlColumnFilter<T: Clone + std::fmt::Debug> {
-    #[default]
-    Ignored,
-    MustBeEqual(T),
-    Contains(T),
-}
-
-impl<T: Into<SqlValue> + Clone + std::fmt::Debug> SqlColumnFilter<T> {
-    pub fn into_generic(self) -> SqlColumnFilter<SqlValue> {
-        match self {
-            SqlColumnFilter::Ignored => SqlColumnFilter::Ignored,
-            SqlColumnFilter::MustBeEqual(it) => SqlColumnFilter::MustBeEqual(it.into()),
-            SqlColumnFilter::Contains(it) => SqlColumnFilter::Contains(it.into()),
-        }
-    }
-}
-
-impl SqlColumnFilter<SqlValue> {
-    pub fn to_sql(&self) -> String {
-        match self {
-            SqlColumnFilter::Ignored => unreachable!(),
-            SqlColumnFilter::MustBeEqual(v) => format!(" = {}", v.to_sql()),
-            SqlColumnFilter::Contains(v) => {
-                let string_representation = v.to_sql();
-                if string_representation.starts_with('\'') && string_representation.ends_with('\'')
-                {
-                    format!(
-                        " LIKE '%{}%'",
-                        &string_representation[1..string_representation.len() - 1]
-                    )
-                } else {
-                    // Fallback to must be equal
-                    format!(" = {}", v.to_sql())
-                }
-            }
-        }
-    }
-}
-
-pub trait IntoSqlColumnFilter {
-    fn into_sql_column_filter(
-        self,
-        name: Cow<'static, str>,
-        string_storage: &mut StaticStringStorage,
-    ) -> Vec<(Cow<'static, str>, SqlColumnFilter<SqlValue>)>;
-}
-
-impl<T: IntoGenericFilter> IntoSqlColumnFilter for T {
-    fn into_sql_column_filter(
-        self,
-        name: Cow<'static, str>,
-        string_storage: &mut StaticStringStorage,
-    ) -> Vec<(Cow<'static, str>, SqlColumnFilter<SqlValue>)> {
-        let generic = self.into_generic(string_storage, Some(name));
-        generic.columns.into_iter().collect()
-    }
-}
-
-// impl<T> IntoSqlColumnFilter for T
-// where
-//     SqlColumnFilter<T>: IntoSqlColumnFilter,
-// {
-//     fn into_sql_column_filter(
-//         self,
-//         name: Cow<'static, str>,
-//         string_storage: &mut StaticStringStorage,
-//     ) -> Vec<(Cow<'static, str>, SqlColumnFilter<SqlValue>)> {
-//         SqlColumnFilter::MustBeEqual(self).into_sql_column_filter(name, string_storage)
-//     }
+// #[derive(Default, Clone, Debug)]
+// pub enum SqlColumnFilter<T: Clone + std::fmt::Debug> {
+//     #[default]
+//     Ignored,
+//     MustBeEqual(T),
+//     Contains(T),
 // }
 
-// impl<T: IntoSqlColumnFilter + Clone + Debug> IntoSqlColumnFilter for SqlColumnFilter<T> {
-//     fn into_sql_column_filter(
-//         self,
-//         name: Cow<'static, str>,
-//         string_storage: &mut StaticStringStorage,
-//     ) -> Vec<(Cow<'static, str>, SqlColumnFilter<SqlValue>)> {
+// impl<T: Into<SqlValue> + Clone + std::fmt::Debug> SqlColumnFilter<T> {
+//     pub fn into_generic(self) -> SqlColumnFilter<SqlValue> {
 //         match self {
-//             SqlColumnFilter::Ignored => vec![],
-//             SqlColumnFilter::MustBeEqual(t) => t.into_sql_column_filter(name, string_storage),
-//             // TODO: This should probably more behave like (does any column of this type have tis value)
-//             SqlColumnFilter::Contains(t) => t.into_sql_column_filter(name, string_storage),
+//             SqlColumnFilter::Ignored => SqlColumnFilter::Ignored,
+//             SqlColumnFilter::MustBeEqual(it) => SqlColumnFilter::MustBeEqual(it.into()),
+//             SqlColumnFilter::Contains(it) => SqlColumnFilter::Contains(it.into()),
 //         }
 //     }
 // }
 
-pub trait HasFilter {
-    type Filter: IntoGenericFilter + Default;
+// impl SqlColumnFilter<SqlValue> {
+//     pub fn to_sql(&self) -> String {
+//         match self {
+//             SqlColumnFilter::Ignored => unreachable!(),
+//             SqlColumnFilter::MustBeEqual(v) => format!(" = {}", v.to_sql()),
+//             SqlColumnFilter::Contains(v) => {
+//                 let string_representation = v.to_sql();
+//                 if string_representation.starts_with('\'') && string_representation.ends_with('\'')
+//                 {
+//                     format!(
+//                         " LIKE '%{}%'",
+//                         &string_representation[1..string_representation.len() - 1]
+//                     )
+//                 } else {
+//                     // Fallback to must be equal
+//                     format!(" = {}", v.to_sql())
+//                 }
+//             }
+//         }
+//     }
+// }
 
-    fn must_be_equal(&self) -> Self::Filter;
-    fn must_contain(&self) -> Self::Filter;
-}
+// pub trait IntoSqlColumnFilter {
+//     fn into_sql_column_filter(
+//         self,
+//         name: Cow<'static, str>,
+//         string_storage: &mut StaticStringStorage,
+//     ) -> Vec<(Cow<'static, str>, SqlColumnFilter<SqlValue>)>;
+// }
 
-impl<F: HasFilter> MustBeEqual<F::Filter> for F {
-    fn must_be_equal(&self) -> F::Filter {
-        self.must_be_equal()
-    }
-}
-
-impl<T: IntoGenericFilter + Default + Clone> HasFilter for T {
-    type Filter = T;
-
-    fn must_be_equal(&self) -> Self::Filter {
-        self.clone()
-    }
-    fn must_contain(&self) -> Self::Filter {
-        self.clone()
-    }
-}
-
-impl<T: HasFilter> HasFilter for Option<T> {
-    type Filter = T::Filter;
-
-    fn must_be_equal(&self) -> Self::Filter {
-        match self {
-            Some(it) => it.must_be_equal(),
-            None => Default::default(),
-        }
-    }
-
-    fn must_contain(&self) -> Self::Filter {
-        match self {
-            Some(it) => it.must_contain(),
-            None => Default::default(),
-        }
-    }
-}
-
-impl<T: HasFilter> HasFilter for Vec<T> {
-    type Filter = T::Filter;
-
-    fn must_be_equal(&self) -> Self::Filter {
-        // self.unwrap().must_be_equal()
-        todo!()
-    }
-
-    fn must_contain(&self) -> Self::Filter {
-        todo!()
-    }
-}
+// impl<T: IntoGenericFilter> IntoSqlColumnFilter for T {
+//     fn into_sql_column_filter(
+//         self,
+//         name: Cow<'static, str>,
+//         string_storage: &mut StaticStringStorage,
+//     ) -> Vec<(Cow<'static, str>, SqlColumnFilter<SqlValue>)> {
+//         let generic = self.into_generic(string_storage, Some(name));
+//         generic.columns.into_iter().collect()
+//     }
+// }
 
 pub trait IntoGenericFilter {
     fn into_generic(
@@ -1413,61 +1043,63 @@ impl GenericOrder {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct GenericFilter {
-    pub columns: HashMap<Cow<'static, str>, SqlColumnFilter<SqlValue>>,
-}
+// #[derive(Debug, Default)]
+// pub struct GenericFilter {
+//     pub columns: HashMap<Cow<'static, str>, SqlColumnFilter<SqlValue>>,
+// }
 
-impl GenericFilter {
-    pub fn insert(
-        &mut self,
-        name: Cow<'static, str>,
-        value: impl IntoSqlColumnFilter,
-        string_storage: &mut StaticStringStorage,
-    ) {
-        Self::insert_into_columns(name, &mut self.columns, value, string_storage);
-    }
+// impl GenericFilter {
+//     pub fn insert(
+//         &mut self,
+//         name: Cow<'static, str>,
+//         value: impl IntoSqlColumnFilter,
+//         string_storage: &mut StaticStringStorage,
+//     ) {
+//         Self::insert_into_columns(name, &mut self.columns, value, string_storage);
+//     }
 
-    pub fn insert_into_columns(
-        name: Cow<'static, str>,
-        columns: &mut HashMap<Cow<'static, str>, SqlColumnFilter<SqlValue>>,
-        value: impl IntoSqlColumnFilter,
-        string_storage: &mut StaticStringStorage,
-    ) {
-        let values = value.into_sql_column_filter(name, string_storage);
-        for (name, value) in values {
-            columns.insert(name, value.clone());
-        }
-    }
+//     pub fn insert_into_columns(
+//         name: Cow<'static, str>,
+//         columns: &mut HashMap<Cow<'static, str>, SqlColumnFilter<SqlValue>>,
+//         value: impl IntoSqlColumnFilter,
+//         string_storage: &mut StaticStringStorage,
+//     ) {
+//         let values = value.into_sql_column_filter(name, string_storage);
+//         for (name, value) in values {
+//             columns.insert(name, value.clone());
+//         }
+//     }
 
-    fn get_params(&self) -> () {
-        ()
-    }
+//     fn get_params(&self) -> () {
+//         ()
+//     }
 
-    fn to_sql(&self) -> String {
-        use std::fmt::Write;
-        if !self
-            .columns
-            .iter()
-            .any(|c| !matches!(c.1, SqlColumnFilter::Ignored))
-        {
-            return String::new();
-        }
-        let mut result: String = "WHERE".into();
-        let mut emitted = false;
-        for (name, filter) in &self.columns {
-            if matches!(filter, SqlColumnFilter::Ignored) {
-                continue;
-            }
-            if emitted {
-                write!(result, " AND").expect("Infallibe");
-            }
-            write!(result, " {name} {}", filter.to_sql()).expect("Infallible");
-            emitted = true;
-        }
-        result
-    }
-}
+//     fn to_sql(&self) -> String {
+//         use std::fmt::Write;
+//         if !self
+//             .columns
+//             .iter()
+//             .any(|c| !matches!(c.1, SqlColumnFilter::Ignored))
+//         {
+//             return String::new();
+//         }
+//         let mut result: String = "WHERE".into();
+//         let mut emitted = false;
+//         for (name, filter) in &self.columns {
+//             if matches!(filter, SqlColumnFilter::Ignored) {
+//                 continue;
+//             }
+//             if emitted {
+//                 write!(result, " AND").expect("Infallibe");
+//             }
+//             write!(result, " {name} {}", filter.to_sql()).expect("Infallible");
+//             emitted = true;
+//         }
+//         result
+//     }
+// }
+
+pub struct PrimaryKey;
 
 #[derive(Debug, Clone)]
 pub enum SqlValue {
@@ -1583,21 +1215,6 @@ pub struct SqlColumn {
     pub is_unique: bool,
 }
 
-impl SqlColumn {
-    pub const fn new<T: HasSqlColumnType>(
-        name: &'static str,
-        is_primary: bool,
-        is_unique: bool,
-    ) -> Self {
-        Self {
-            name: Cow::Borrowed(name),
-            r#type: T::SQL_COLUMN_TYPE,
-            is_primary,
-            is_unique,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SqlColumnType {
     Float,
@@ -1645,7 +1262,7 @@ pub trait PartialRow {
 
 impl<T: AsParams> PartialRow for Option<T> {
     fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
-        if self.has_values() {
+        if self.is_some() {
             vec![column_name.expect("Needs column name!")]
         } else {
             Vec::new()
@@ -1661,30 +1278,30 @@ impl<T: AsParams> PartialRow for Option<T> {
     }
 }
 
-impl<T: AsParams> PartialRow for Vec<T> {
-    fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
-        if self.has_values() {
-            vec![column_name.expect("Needs column name!")]
-        } else {
-            Vec::new()
-        }
-    }
+// impl<T: AsParams> PartialRow for Vec<T> {
+//     fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
+//         if self.has_values() {
+//             vec![column_name.expect("Needs column name!")]
+//         } else {
+//             Vec::new()
+//         }
+//     }
 
-    fn used_values(&self) -> Vec<&dyn rusqlite::ToSql> {
-        if self.len() > 1 {
-            eprintln!("Ahh, this is lossy!");
-        }
-        if let Some(value) = self.into_iter().next() {
-            value.as_params()
-        } else {
-            Vec::new()
-        }
-    }
-}
+//     fn used_values(&self) -> Vec<&dyn rusqlite::ToSql> {
+//         if self.len() > 1 {
+//             eprintln!("Ahh, this is lossy!");
+//         }
+//         if let Some(value) = self.into_iter().next() {
+//             value.as_params()
+//         } else {
+//             Vec::new()
+//         }
+//     }
+// }
 
-pub fn insert_into_table<'a, T: RowType + IntoSqlTable<'a> + Clone>(
+pub fn insert_into_table<'a, T: ToTable<'a> + Clone>(
     connection: &&'a rusqlite::Connection,
-    value: impl ToRows<T>,
+    value: T,
     on_failure: SqlFailureBehavior,
 ) -> Result<(), rusqlite::Error> {
     let columns = T::columns()
@@ -1719,27 +1336,23 @@ pub fn insert_into_table<'a, T: RowType + IntoSqlTable<'a> + Clone>(
     );
 
     let mut stmt = connection.prepare(&sql)?;
-    for row in value.to_rows() {
-        row.clone()
-            .insert_into_connected_foreign_tables(true, connection)?;
-        stmt.execute(row.as_params().as_slice())?;
-    }
+    stmt.execute(value.as_params().as_slice())?;
+    // for row in value.to_rows() {
+    //     row.clone()
+    //         .insert_into_connected_foreign_tables(true, connection)?;
+    // }
     Ok(())
 }
 
-pub fn update_rows<'a, T: IntoSqlTable<'a> + RowType>(
+pub fn update_rows<'a, T: ToTable<'a> + HasPartial>(
     connection: &&'a rusqlite::Connection,
-    filter: GenericFilter,
-    value: impl ToRows<T::Partial>,
+    filter: (),
+    value: T::Partial,
 ) -> Result<(), rusqlite::Error>
 where
     T::Partial: PartialRow,
 {
-    let values = value.to_rows();
-    if values.is_empty() {
-        return Ok(());
-    }
-    let columns: Vec<String> = values[0].used_column_names(None);
+    let columns: Vec<String> = value.used_column_names(None);
     if columns.is_empty() {
         return Ok(());
     }
@@ -1747,7 +1360,7 @@ where
         .into_iter()
         .enumerate()
         .map(|(i, c)| format!("{c} = ?{}", i + 1))
-        .fold(String::new(), |mut acc, cur| {
+        .fold(String::new(), |mut acc: String, cur| {
             if acc.is_empty() {
                 cur
             } else {
@@ -1758,23 +1371,21 @@ where
         });
     let mut sql = format!("UPDATE {} SET {columns_set}", T::NAME);
     sql.push(' ');
-    sql.push_str(&filter.to_sql());
+    // sql.push_str(&filter.to_sql());
     #[cfg(feature = "debug_sql")]
     dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
-    for value in values {
-        let values: Vec<&dyn rusqlite::ToSql> = value.used_values();
-        statement.execute(values.as_slice())?;
-    }
+    let values: Vec<&dyn rusqlite::ToSql> = value.used_values();
+    statement.execute(values.as_slice())?;
     Ok(())
 }
 
-pub fn query_table_filtered<'a, T: IntoSqlTable<'a> + RowType, U: FromRowType<T>>(
+pub fn query_table_filtered<'a, T: ToTable<'a>>(
     connection: &&'a rusqlite::Connection,
     string_storage: &mut StaticStringStorage,
     filter: GenericFilter,
     order: GenericOrder,
-) -> Result<Vec<U>, rusqlite::Error> {
+) -> Result<Vec<T>, rusqlite::Error> {
     let columns = T::columns()
         .into_iter()
         .map(|c| c.name)
@@ -1787,46 +1398,46 @@ pub fn query_table_filtered<'a, T: IntoSqlTable<'a> + RowType, U: FromRowType<T>
                 acc
             }
         });
-    if !filter
-        .columns
-        .keys()
-        .into_iter()
-        .all(|k| T::columns().iter().any(|c| &c.name == k))
-    {
-        todo!("Load missing tables?")
-    }
+    // if !filter
+    //     .columns
+    //     .keys()
+    //     .into_iter()
+    //     .all(|k| T::columns().iter().any(|c| &c.name == k))
+    // {
+    //     todo!("Load missing tables?")
+    // }
     let mut sql = format!("SELECT {columns} from {}", T::NAME);
     sql.push(' ');
-    sql.push_str(&filter.to_sql());
+    // sql.push_str(&filter.to_sql());
     sql.push(' ');
     sql.push_str(&order.to_sql());
     #[cfg(feature = "debug_sql")]
     dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
-    Ok(FromRowType::from_row_type(
-        statement
-            .query_map(filter.get_params(), |row| {
-                Ok(
-                    T::try_from_row(string_storage, None, row, &connection).unwrap_or_else(|| {
-                        #[cfg(feature = "debug_sql")]
-                        dbg!(row);
-                        panic!("Failed constructing value from row")
-                    }),
-                )
-            })?
-            .collect::<Result<Vec<T>, _>>()?,
-    ))
+    Ok(statement
+        .query_map((), |row| {
+            Ok(
+                T::try_from_row(string_storage, None, row, &connection).unwrap_or_else(|| {
+                    #[cfg(feature = "debug_sql")]
+                    dbg!(row);
+                    panic!("Failed constructing value from row")
+                }),
+            )
+        })?
+        .collect::<Result<Vec<T>, _>>()?)
 }
 
-pub fn delete_table_filtered<'a, T: IntoSqlTable<'a>>(
+type GenericFilter = ();
+
+pub fn delete_table_filtered<'a, T: ToTable<'a>>(
     connection: &&'a rusqlite::Connection,
     filter: GenericFilter,
 ) -> Result<usize, rusqlite::Error> {
     let mut sql = format!("DELETE FROM {}", T::NAME);
     sql.push(' ');
-    sql.push_str(&filter.to_sql());
+    // sql.push_str(&filter.to_sql());
     #[cfg(feature = "debug_sql")]
     dbg!(&sql);
     let mut statement = connection.prepare(&sql)?;
-    Ok(statement.execute(filter.get_params())?)
+    Ok(statement.execute(())?)
 }

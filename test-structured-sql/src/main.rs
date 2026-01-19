@@ -1,6 +1,6 @@
 use std::any::type_name_of_val;
 
-use silo::{Database, IntoSqlTable, MigrationHandler, PartialType, SqlTable, StaticStringStorage};
+use silo::{Database, MigrationHandler, PartialType, SqlTable, StaticStringStorage, ToTable};
 
 extern crate alloc;
 extern crate core;
