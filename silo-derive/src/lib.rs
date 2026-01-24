@@ -216,23 +216,20 @@ impl ToTokens for ToTable {
         self.create_conversions(tokens);
         let path = format!("dbg/to-table-for-{}.rs", self.base_struct.name);
         std::fs::write(&path, tokens.to_string()).unwrap();
-        assert!(
-            std::process::Command::new("rustfmt")
-                .args([
-                    "--emit",
-                    "files",
-                    "--edition",
-                    "2024",
-                    "--style-edition",
-                    "2024",
-                    &path
-                ])
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap()
-                .success()
-        );
+        std::process::Command::new("rustfmt")
+            .args([
+                "--emit",
+                "files",
+                "--edition",
+                "2024",
+                "--style-edition",
+                "2024",
+                &path,
+            ])
+            .spawn()
+            .unwrap()
+            .wait()
+            .unwrap();
     }
 }
 

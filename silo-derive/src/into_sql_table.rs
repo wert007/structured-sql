@@ -1,7 +1,4 @@
-use ident_case_conversions::CaseConversions;
-use quote::{format_ident, quote};
-
-use crate::type_checker::{StripOption, ToName};
+use quote::quote;
 
 pub(crate) fn create_into_sql_table(
     base_struct: &crate::base_struct::StructData,
@@ -9,6 +6,8 @@ pub(crate) fn create_into_sql_table(
     let name = &base_struct.name;
     let table_name = base_struct.table_name();
     let columns = base_struct.columns();
+
+    let field_names: Vec<_> = base_struct.fields().iter().map(|f| f.name).collect();
 
     quote! {
         impl<'a> silo::ToTable<'a> for #name {
@@ -18,6 +17,14 @@ pub(crate) fn create_into_sql_table(
 
             fn fill_columns(columns: &mut Vec<silo::SqlColumn>) {
                 #(columns.extend(#columns);)*
+            }
+
+            fn insert_foreign_references(self, connection: &silo::rusqlite::Connection) -> Result<(), silo::rusqlite::Error> {
+                use silo::AsForeignReference;
+                #(
+                    self.#field_names.insert_as_foreign_reference(connection)?;
+                )*
+                Ok(())
             }
         }
     }

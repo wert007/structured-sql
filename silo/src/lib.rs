@@ -541,6 +541,15 @@ macro_rules! impl_as_params {
                 row.get(column_name).ok()
             }
         }
+
+        impl AsForeignReference for $t {
+            fn insert_as_foreign_reference(
+                self,
+                _: &rusqlite::Connection,
+            ) -> Result<(), rusqlite::Error> {
+                Ok(())
+            }
+        }
     };
 }
 
@@ -562,6 +571,15 @@ macro_rules! impl_as_params_and_nan_is_none {
                 Some(row.get(column_name).ok().unwrap_or(<$t>::NAN))
             }
         }
+
+        impl AsForeignReference for $t {
+            fn insert_as_foreign_reference(
+                self,
+                _: &rusqlite::Connection,
+            ) -> Result<(), rusqlite::Error> {
+                Ok(())
+            }
+        }
     };
 }
 
@@ -575,6 +593,15 @@ macro_rules! impl_as_params_and_column_filter {
             const COLUMN_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
+            }
+        }
+
+        impl<'a> AsForeignReference for $t {
+            fn insert_as_foreign_reference(
+                self,
+                _: &rusqlite::Connection,
+            ) -> Result<(), rusqlite::Error> {
+                Ok(())
             }
         }
     };
@@ -699,6 +726,20 @@ pub trait ToTable<'a>: TableAsParams + FromRow {
     }
 
     fn fill_columns(columns: &mut Vec<SqlColumn>);
+
+    fn insert_foreign_references(
+        self,
+        connection: &rusqlite::Connection,
+    ) -> Result<(), rusqlite::Error> {
+        Ok(())
+    }
+}
+
+pub trait AsForeignReference {
+    fn insert_as_foreign_reference(
+        self,
+        connection: &rusqlite::Connection,
+    ) -> Result<(), rusqlite::Error>;
 }
 
 #[diagnostic::on_unimplemented(
@@ -1226,6 +1267,7 @@ pub fn insert_into_table<'a, T: ToTable<'a> + Clone>(
 
     let mut stmt = connection.prepare(&sql)?;
     stmt.execute(value.as_params().as_slice())?;
+    value.insert_foreign_references(connection)?;
     // for row in value.to_rows() {
     //     row.clone()
     //         .insert_into_connected_foreign_tables(true, connection)?;

@@ -92,6 +92,19 @@ pub(crate) fn create_as_params_for_pk(
     let pk_name = pk.name;
     let name = &base_struct.name;
     let as_params = quote! {
+        impl silo::AsForeignReference for #name {
+            fn insert_as_foreign_reference(
+                self,
+                connection: &rusqlite::Connection,
+            ) -> Result<(), rusqlite::Error> {
+                use silo::SqlTable;
+                let db = unsafe {silo::Database::from_connection(connection)}?;
+                let table = db.load::<Self>()?;
+                table.insert(self)?;
+                Ok(())
+            }
+        }
+
         impl silo::AsParams for #name {
             const COLUMN_COUNT: usize = 1;
             fn as_params<'a>(&'a self) -> Vec<&'a dyn silo::rusqlite::ToSql> {
