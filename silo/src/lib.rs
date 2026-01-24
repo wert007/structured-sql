@@ -21,6 +21,8 @@ pub const ENABLE_DEBUG_PRINTING: bool = true;
 #[cfg(not(feature = "debug_sql"))]
 pub const ENABLE_DEBUG_PRINTING: bool = false;
 
+mod filter;
+
 #[cfg(test)]
 mod test {
     #[test]

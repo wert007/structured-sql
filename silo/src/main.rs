@@ -40,6 +40,22 @@ fn main() {
         })
         .unwrap();
     // persons.load_all();
+    persons.load_where(|f| {
+        f.or(
+            f.and(
+                f.name_equals("JE"),
+                f.or(f.age_less_than(60), f.age_greater_than(70)),
+            ),
+            f.residence().city_equals("Toronot"),
+        )
+    });
+    // persons.load_where(|f| {
+    //     f.name_equals("Johnny english")
+    //         .and()
+    //         .age_less_than(60)
+    //         .or()
+    //         .age_greater_than(70)
+    // });
     db.save("file.sqlite").unwrap();
     println!("Hello, world!");
 }
