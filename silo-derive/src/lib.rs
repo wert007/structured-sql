@@ -116,7 +116,6 @@ impl ToTable {
         quote! {
         #visibility struct #table_name<'a> {
             connection: &'a silo::rusqlite::Connection,
-            string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>,
         }
 
         impl<'a> #table_name<'a> {
@@ -171,8 +170,8 @@ impl ToTable {
             //     )
             // }
 
-            fn from_connection(connection: &'a silo::rusqlite::Connection, string_storage: std::sync::Arc<std::sync::Mutex<silo::StaticStringStorage>>) -> Self {
-                Self { connection, string_storage }
+            fn from_connection(connection: &'a silo::rusqlite::Connection) -> Self {
+                Self { connection }
             }
         }
         }
@@ -188,7 +187,9 @@ impl ToTable {
         }
         from_row::create_from_row_for(&self.base_struct, tokens);
         partial::create_partial_for(&self.base_struct, false, tokens);
-        as_params::create_as_params(&self.base_struct, tokens);
+        // TODO: ToColumns would use false here!
+        as_params::create_as_params(&self.base_struct, tokens, true);
+        as_params::create_as_params_for_pk(&self.base_struct, tokens);
         if let Some(pk) = self.base_struct.primary_key_field() {
             to_columns::create_to_columns_for_pk(&self.base_struct, pk, tokens)
         }

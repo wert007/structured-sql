@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 #[derive(Default, Debug, Clone, silo::derive::ToTable)]
 // #[silo(primary_key)]
 struct AddressTT {
@@ -41,6 +39,7 @@ fn main() {
             },
         })
         .unwrap();
+    // persons.load_all();
     db.save("file.sqlite").unwrap();
     println!("Hello, world!");
 }

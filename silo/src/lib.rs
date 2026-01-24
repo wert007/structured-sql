@@ -1,9 +1,7 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
     fmt::{Debug, Display},
     path::Path,
-    sync::{Arc, Mutex},
 };
 
 pub use rusqlite;
@@ -37,19 +35,13 @@ mod test {
         // assert_eq!(coords.as_slice(), &[]);
         Ok(())
     }
-    use std::{
-        borrow::Cow,
-        collections::HashMap,
-        error::Error,
-        sync::{Arc, Mutex},
-    };
+    use std::{borrow::Cow, error::Error};
 
     use rusqlite::{Connection, OptionalExtension};
 
     use crate::{
-        AsParams, Database, FromRow, GenericFilter, HasColumnCount, HasPartial, IntoGenericFilter,
-        MigrationHandler, PartialType, SqlColumn, SqlColumnType, SqlTable, StaticStringStorage,
-        ToTable, handle_migration,
+        Database, FromRow, HasPartial, MigrationHandler, PartialType, SqlColumn, SqlColumnType,
+        SqlTable, TableAsParams, ToTable,
     };
 
     #[derive(Debug, PartialEq)]
@@ -73,12 +65,7 @@ mod test {
     }
 
     impl FromRow for PartialCoord {
-        fn try_from_row(
-            _string_storage: &mut StaticStringStorage,
-            _column_name: Option<Cow<'static, str>>,
-            _row: &rusqlite::Row,
-            _connection: &rusqlite::Connection,
-        ) -> Option<Self> {
+        fn try_from_row(_row: &rusqlite::Row, _connection: &rusqlite::Connection) -> Option<Self> {
             // row.get("x")
             todo!();
         }
@@ -94,23 +81,15 @@ mod test {
     }
 
     impl FromRow for Coord {
-        fn try_from_row(
-            _string_storage: &mut StaticStringStorage,
-            _column_name: Option<Cow<'static, str>>,
-            row: &rusqlite::Row,
-            _connection: &rusqlite::Connection,
-        ) -> Option<Self> {
+        fn try_from_row(row: &rusqlite::Row, _connection: &rusqlite::Connection) -> Option<Self> {
             let x: f64 = row.get("x").optional().unwrap()?;
             let y: f64 = row.get("y").optional().unwrap()?;
             Some(Self { x, y })
         }
     }
 
-    impl HasColumnCount for Coord {
+    impl TableAsParams for Coord {
         const COLUMN_COUNT: usize = 2;
-    }
-
-    impl AsParams for Coord {
         fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
             vec![&self.x, &self.y]
         }
@@ -145,7 +124,6 @@ mod test {
 
     struct CoordTable<'a> {
         connection: &'a Connection,
-        string_storage: Arc<Mutex<StaticStringStorage>>,
     }
 
     impl<'a> SqlTable<'a> for CoordTable<'a> {
@@ -201,14 +179,8 @@ mod test {
         //     crate::delete_table_filtered::<Self::RowType>(&self.connection, generic)
         // }
 
-        fn from_connection(
-            connection: &'a Connection,
-            string_storage: Arc<Mutex<StaticStringStorage>>,
-        ) -> Self {
-            Self {
-                connection,
-                string_storage,
-            }
+        fn from_connection(connection: &'a Connection) -> Self {
+            Self { connection }
         }
 
         const INSERT_FAILURE_BEHAVIOR: crate::SqlFailureBehavior =
@@ -242,7 +214,6 @@ pub trait EnumHelper {
 
 pub fn handle_migration<T: for<'a> ToTable<'a> + MigrationHandler>(
     connection: &rusqlite::Connection,
-    string_storage: &mut StaticStringStorage,
     actual_columns: &[SqlColumn],
 ) -> Result<(), rusqlite::Error>
 where
@@ -277,20 +248,14 @@ where
     let entries: Vec<_> = s
         .query_map((), |row| {
             let partial =
-                <T as HasPartial>::Partial::try_from_row(string_storage, None, row, connection)
-                    .unwrap_or_else(|| {
-                        dbg!(
-                            row,
-                            // <<T as HasPartialRepresentation>::Partial as Default>::default()
-                        );
-                        panic!("Partial should always match???")
-                    });
-            Ok(<T as MigrationHandler>::migrate(
-                string_storage,
-                partial,
-                row,
-                connection,
-            ))
+                <T as HasPartial>::Partial::try_from_row(row, connection).unwrap_or_else(|| {
+                    dbg!(
+                        row,
+                        // <<T as HasPartialRepresentation>::Partial as Default>::default()
+                    );
+                    panic!("Partial should always match???")
+                });
+            Ok(<T as MigrationHandler>::migrate(partial, row, connection))
         })?
         .filter_map(|x| x.ok().flatten())
         .collect();
@@ -338,67 +303,14 @@ where
     connection.execute(&sql, ())?;
     Ok(())
 }
-pub struct StaticStringStorage {
-    values: Vec<&'static str>,
-    capacities: Vec<usize>,
-}
-
-impl StaticStringStorage {
-    pub fn store(&mut self, parts: &[&'static str]) -> &'static str {
-        let value = parts.concat();
-        self.store_heaped(value)
-    }
-
-    pub fn store_heaped(&mut self, value: String) -> &'static str {
-        if let Some(v) = self.get(&value) {
-            v
-        } else {
-            let capacity = value.capacity();
-            let value = value.leak();
-            self.values.push(value);
-            self.capacities.push(capacity);
-            value
-        }
-    }
-
-    fn get(&self, value: &str) -> Option<&'static str> {
-        self.values.iter().find(|v| v == &&value).copied()
-    }
-
-    pub fn new() -> Self {
-        Self {
-            values: Vec::new(),
-            capacities: Vec::new(),
-        }
-    }
-}
-
-impl Drop for StaticStringStorage {
-    fn drop(&mut self) {
-        #[allow(unused_variables)]
-        for (value, capacity) in self.values.iter().zip(&self.capacities) {
-            #[allow(unused_unsafe)]
-            unsafe {
-                // DE-LEAK the leaked strings again! This actually invalidates
-                // all references to the static references, we handed out, so it
-                // is very much unsafe.
-                // String::from_raw_parts(value.as_ptr() as *mut u8, value.len(), *capacity);
-            }
-        }
-    }
-}
 
 pub struct Database {
     connection: rusqlite::Connection,
-    static_string_storage: Arc<Mutex<StaticStringStorage>>,
 }
 
 impl Database {
     fn new_from_connection(connection: rusqlite::Connection) -> Self {
-        Self {
-            connection,
-            static_string_storage: Arc::new(Mutex::new(StaticStringStorage::new())),
-        }
+        Self { connection }
     }
 
     pub unsafe fn from_connection(
@@ -414,10 +326,6 @@ impl Database {
         Ok(Self::new_from_connection(connection))
     }
 
-    pub fn store(&mut self, parts: &[&'static str]) -> &'static str {
-        self.static_string_storage.lock().unwrap().store(parts)
-    }
-
     pub fn open(path: impl AsRef<Path>) -> Result<Self, rusqlite::Error> {
         let connection = rusqlite::Connection::open(path)?;
         connection.execute("DROP TABLE IF EXISTS temporary", ())?;
@@ -431,14 +339,7 @@ impl Database {
     pub fn load<'a, T: ToTable<'a>>(&'a self) -> rusqlite::Result<T::Table> {
         self.create::<T>()?;
 
-        Ok(T::Table::from_connection(
-            &self.connection,
-            self.static_string_storage.clone(),
-        ))
-        // if self.table_exists(table_name)? {
-        //     self.load_table::<T>(table_name)
-        // } else {
-        // }
+        Ok(T::Table::from_connection(&self.connection))
     }
 
     fn create<'a, T: ToTable<'a>>(&'a self) -> Result<(), rusqlite::Error> {
@@ -591,11 +492,29 @@ fn compare_columns(actual: &[SqlColumn], expected: &[SqlColumn]) -> bool {
     return !necessary_alternations.is_empty();
 }
 
-pub trait AsParams: HasColumnCount {
+pub trait AsParams {
+    const COLUMN_COUNT: usize;
+
+    fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
+}
+
+pub trait TableAsParams {
+    const COLUMN_COUNT: usize;
+
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
 }
 
 impl<T: AsParams> AsParams for Option<T> {
+    const COLUMN_COUNT: usize = T::COLUMN_COUNT;
+    fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
+        match self {
+            Some(it) => it.as_params(),
+            None => vec![&Null; T::COLUMN_COUNT],
+        }
+    }
+}
+impl<T: TableAsParams> TableAsParams for Option<T> {
+    const COLUMN_COUNT: usize = T::COLUMN_COUNT;
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
         match self {
             Some(it) => it.as_params(),
@@ -606,29 +525,20 @@ impl<T: AsParams> AsParams for Option<T> {
 
 macro_rules! impl_as_params {
     ($t:ty) => {
-        impl HasColumnCount for $t {
-            const COLUMN_COUNT: usize = 1;
-        }
-
         impl HasPartial for $t {
             type Partial = Option<$t>;
         }
 
         impl AsParams for $t {
+            const COLUMN_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
             }
         }
 
-        impl FromRow for $t {
-            fn try_from_row(
-                _string_storage: &mut StaticStringStorage,
-                column_name: Option<Cow<'static, str>>,
-                row: &rusqlite::Row,
-                _connection: &rusqlite::Connection,
-            ) -> Option<Self> {
-                row.get(column_name.as_ref().expect("column name").as_ref())
-                    .ok()
+        impl ExtractFromRow for $t {
+            fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Option<Self> {
+                row.get(column_name).ok()
             }
         }
     };
@@ -636,32 +546,20 @@ macro_rules! impl_as_params {
 
 macro_rules! impl_as_params_and_nan_is_none {
     ($t:ty) => {
-        impl HasColumnCount for $t {
-            const COLUMN_COUNT: usize = 1;
-        }
-
         impl HasPartial for $t {
             type Partial = Option<$t>;
         }
 
         impl AsParams for $t {
+            const COLUMN_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
             }
         }
 
-        impl FromRow for $t {
-            fn try_from_row(
-                _string_storage: &mut StaticStringStorage,
-                column_name: Option<Cow<'static, str>>,
-                row: &rusqlite::Row,
-                _connection: &rusqlite::Connection,
-            ) -> Option<Self> {
-                Some(
-                    row.get(column_name.as_ref().expect("column name").as_ref())
-                        .ok()
-                        .unwrap_or(<$t>::NAN),
-                )
+        impl ExtractFromRow for $t {
+            fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Option<Self> {
+                Some(row.get(column_name).ok().unwrap_or(<$t>::NAN))
             }
         }
     };
@@ -673,11 +571,8 @@ macro_rules! impl_as_params_and_column_filter {
             type Partial = Option<$t>;
         }
 
-        impl<'a> HasColumnCount for $t {
-            const COLUMN_COUNT: usize = 1;
-        }
-
         impl<'a> AsParams for $t {
+            const COLUMN_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
             }
@@ -731,12 +626,18 @@ related_sql_column_type!(SqlColumnType::Text, Date);
 related_sql_column_type!(SqlColumnType::Text, OffsetDateTime);
 
 pub trait FromRow: Sized {
+    fn try_from_row(row: &rusqlite::Row, connection: &rusqlite::Connection) -> Option<Self>;
+}
+
+pub trait ExtractFromRow: Sized {
+    fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Option<Self>;
     fn try_from_row(
-        string_storage: &mut StaticStringStorage,
-        column_name: Option<Cow<'static, str>>,
+        column_name: &str,
         row: &rusqlite::Row,
-        connection: &rusqlite::Connection,
-    ) -> Option<Self>;
+        _connection: &rusqlite::Connection,
+    ) -> Option<Self> {
+        Self::try_from_row_simple(column_name, row)
+    }
 }
 
 pub trait PartialType<T> {
@@ -760,7 +661,6 @@ where
     <Self as HasPartial>::Partial: PartialType<Self>,
 {
     fn migrate(
-        string_storage: &mut StaticStringStorage,
         partial: Self::Partial,
         row: &rusqlite::Row,
         connection: &rusqlite::Connection,
@@ -770,29 +670,25 @@ where
 }
 
 // TODO: Is this right? Kind of depends on the reason of failure, doesn't it?
-impl<T: FromRow> FromRow for Option<T> {
-    fn try_from_row(
-        string_storage: &mut StaticStringStorage,
-        column_name: Option<Cow<'static, str>>,
-        row: &rusqlite::Row,
-        connection: &rusqlite::Connection,
-    ) -> Option<Self> {
-        match T::try_from_row(string_storage, column_name, row, connection) {
+impl<T: ExtractFromRow> ExtractFromRow for Option<T> {
+    fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Option<Self> {
+        match T::try_from_row_simple(column_name, row) {
             Some(it) => Some(Some(it)),
             None => Some(None),
         }
     }
 }
 
-pub trait HasColumnCount {
-    const COLUMN_COUNT: usize;
+impl<T: FromRow> FromRow for Option<T> {
+    fn try_from_row(row: &rusqlite::Row, connection: &rusqlite::Connection) -> Option<Self> {
+        match T::try_from_row(row, connection) {
+            Some(it) => Some(Some(it)),
+            None => Some(None),
+        }
+    }
 }
 
-impl<T: HasColumnCount> HasColumnCount for Option<T> {
-    const COLUMN_COUNT: usize = T::COLUMN_COUNT;
-}
-
-pub trait ToTable<'a>: HasColumnCount + AsParams + FromRow {
+pub trait ToTable<'a>: TableAsParams + FromRow {
     const NAME: &'static str;
     type Table: SqlTable<'a>;
 
@@ -811,7 +707,7 @@ pub trait ToTable<'a>: HasColumnCount + AsParams + FromRow {
     note = "You can either add an primary_key or derive ToColumns.",
     note = "Read documentation on ToColumns for more information."
 )]
-pub trait ToColumns: HasColumnCount + AsParams + FromRow {
+pub trait ToColumns: AsParams + FromRow {
     fn columns() -> Vec<SqlColumn> {
         let mut result = Vec::with_capacity(Self::COLUMN_COUNT);
         Self::fill_columns(&mut result);
@@ -860,10 +756,7 @@ pub trait SqlTable<'a> {
     type RowType;
     type ValueType;
     const INSERT_FAILURE_BEHAVIOR: SqlFailureBehavior;
-    fn from_connection(
-        connection: &'a Connection,
-        string_storage: Arc<Mutex<StaticStringStorage>>,
-    ) -> Self;
+    fn from_connection(connection: &'a Connection) -> Self;
     // fn filter(
     //     &self,
     //     filter: <Self::RowType as HasFilter>::Filter,
@@ -968,11 +861,7 @@ pub trait SqlTable<'a> {
 // }
 
 pub trait IntoGenericFilter {
-    fn into_generic(
-        self,
-        string_storage: &mut StaticStringStorage,
-        column_name: Option<Cow<'static, str>>,
-    ) -> GenericFilter;
+    fn into_generic(self, column_name: Option<Cow<'static, str>>) -> GenericFilter;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1382,7 +1271,6 @@ where
 
 pub fn query_table_filtered<'a, T: ToTable<'a>>(
     connection: &&'a rusqlite::Connection,
-    string_storage: &mut StaticStringStorage,
     filter: GenericFilter,
     order: GenericOrder,
 ) -> Result<Vec<T>, rusqlite::Error> {
@@ -1416,13 +1304,11 @@ pub fn query_table_filtered<'a, T: ToTable<'a>>(
     let mut statement = connection.prepare(&sql)?;
     Ok(statement
         .query_map((), |row| {
-            Ok(
-                T::try_from_row(string_storage, None, row, &connection).unwrap_or_else(|| {
-                    #[cfg(feature = "debug_sql")]
-                    dbg!(row);
-                    panic!("Failed constructing value from row")
-                }),
-            )
+            Ok(T::try_from_row(row, &connection).unwrap_or_else(|| {
+                #[cfg(feature = "debug_sql")]
+                dbg!(row);
+                panic!("Failed constructing value from row")
+            }))
         })?
         .collect::<Result<Vec<T>, _>>()?)
 }
