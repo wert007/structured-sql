@@ -305,6 +305,7 @@ pub struct StructData {
     variants: Vec<VariantData>,
     pub is_partial: bool,
     pub is_row_type: bool,
+    pub(crate) original_name: Ident,
 }
 
 impl StructData {
@@ -339,6 +340,7 @@ impl StructData {
             .collect();
         let mut this = Self {
             visibility,
+            original_name: name.clone(),
             name,
             members: Vec::new(),
             variant_member: None,
@@ -372,6 +374,7 @@ impl StructData {
             .collect();
         let mut this = Self {
             variants,
+            original_name: name.clone(),
             variant_member: Some(Member::create_variant_member(name.span())),
             visibility,
             name,
@@ -417,6 +420,7 @@ impl StructData {
     pub(crate) fn to_partial(&self) -> StructData {
         StructData {
             visibility: self.visibility.clone(),
+            original_name: self.original_name.clone(),
             name: self.partial_name(),
             members: self
                 .members

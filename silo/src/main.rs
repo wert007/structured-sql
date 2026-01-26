@@ -39,16 +39,18 @@ fn main() {
             },
         })
         .unwrap();
+    db.save("file.sqlite").unwrap();
+
     // persons.load_all();
-    persons.load_where(|f| {
-        f.or(
+    let r = persons
+        .load_where(|f| {
             f.and(
-                f.name_equals("JE"),
+                f.name_equals("Johnny English"),
                 f.or(f.age_less_than(60), f.age_greater_than(70)),
-            ),
-            f.residence().city_equals("Toronot"),
-        )
-    });
+            )
+        })
+        .unwrap();
+    dbg!(r);
     // persons.load_where(|f| {
     //     f.name_equals("Johnny english")
     //         .and()
@@ -56,6 +58,5 @@ fn main() {
     //         .or()
     //         .age_greater_than(70)
     // });
-    db.save("file.sqlite").unwrap();
     println!("Hello, world!");
 }

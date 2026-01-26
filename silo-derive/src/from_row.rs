@@ -1,4 +1,5 @@
-use quote::quote;
+use quote::{format_ident, quote};
+use syn::Ident;
 
 pub(crate) fn create_from_row_for(
     base_struct: &crate::base_struct::StructData,
@@ -19,15 +20,16 @@ pub(crate) fn create_from_row_for_base_struct(
         let partial = base_struct.partial_name();
         quote!(
             use silo::PartialType;
-            #partial::try_from_row(row, connection)?.transpose())
+            #partial::try_from_row(row, connection)?.transpose().ok_or(silo::Error::Todo("Improve error handling here, so we know which column was missing".into()))
+        )
     };
     let extract_from_row_body = if base_struct.is_partial {
-        create_extract_from_row_body(base_struct)
+        create_extract_from_row_body(&base_struct.original_name, base_struct)
     } else {
         let partial = base_struct.partial_name();
         quote!(
             use silo::PartialType;
-            #partial::try_from_row(column, row, connection)?.transpose()
+            #partial::try_from_row(column, row, connection)?.transpose().ok_or(silo::Error::Todo("Improve error handling here, so we know which column was missing".into()))
         )
     };
     let from_row = quote! {
@@ -35,7 +37,7 @@ pub(crate) fn create_from_row_for_base_struct(
             fn try_from_row(
                 row: &silo::rusqlite::Row,
                 connection: &silo::rusqlite::Connection,
-            ) -> Option<Self> {
+            ) -> Result<Self, silo::Error> {
                 #from_row_body
             }
         }
@@ -46,12 +48,12 @@ pub(crate) fn create_from_row_for_base_struct(
                 fn try_from_row_simple(
                     column: &str,
                     row: &silo::rusqlite::Row,
-                ) -> Option<Self> {None}
+                ) -> Result<Self, silo::Error> {unreachable!("should not be called directly!")}
                 fn try_from_row(
                     column: &str,
                     row: &silo::rusqlite::Row,
                     connection: &silo::rusqlite::Connection,
-                ) -> Option<Self> {
+                ) -> Result<Self, silo::Error> {
                     #extract_from_row_body
                 }
             }
@@ -64,16 +66,26 @@ pub(crate) fn create_from_row_for_base_struct(
 }
 
 fn create_extract_from_row_body(
+    table_type: &Ident,
     base_struct: &crate::base_struct::StructData,
 ) -> proc_macro2::TokenStream {
-    let unit = syn::parse_quote!(());
-    let pk_type = base_struct
-        .primary_key_field()
-        .map(|f| f.type_)
-        .unwrap_or(&unit);
+    let Some(pk) = base_struct.primary_key_field() else {
+        return quote! {};
+    };
+    let pk_type = pk.type_;
+    let pk_name = pk.name;
+    let filter = format_ident!("{}_equals", pk.name);
     quote! {
-        let pk: #pk_type = row.get(column).ok()?;
-        todo!("Support loading foreign keys. (Needs filtering back!)")
+        use silo::SqlTable;
+        let #pk_name: #pk_type = row.get(format!("{}_{}", column, stringify!(#pk_name)).as_str())?;
+        let Some(#pk_name) = #pk_name else {
+            return Ok(Default::default());
+        };
+        let __silo__db = unsafe { silo::Database::from_connection(connection)}?;
+        let __silo__foreign = __silo__db.load::<#table_type>()?;
+        let mut results = __silo__foreign.load_where(|f| f.#filter(#pk_name))?;
+        assert_eq!(results.len(), 1, "Primary key was not unique!");
+        Ok(results.pop().map(|r| r.into()).unwrap_or_default())
     }
 }
 
@@ -85,12 +97,12 @@ fn create_try_from_row_body(
     let column_types = columns.iter().map(|c| c.type_);
 
     if let Some(variant) = base_struct.variant_field().map(|f| f.name) {
-        quote! {None}
+        quote! {todo!("Enums not yet supported!")}
     } else {
         quote! {#(
             let #column_names = <#column_types as silo::ExtractFromRow>::try_from_row(stringify!(#column_names), row, connection)?;
         )*
-        Some(Self {
+        Ok(Self {
             #(#column_names,)*
         })}
     }

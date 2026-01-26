@@ -16,12 +16,14 @@ use time::macros::format_description;
 use time::{Date, Time};
 use time::{OffsetDateTime, format_description::FormatItem};
 
+use crate::filter::ToFilter;
+
 #[cfg(feature = "debug_sql")]
 pub const ENABLE_DEBUG_PRINTING: bool = true;
 #[cfg(not(feature = "debug_sql"))]
 pub const ENABLE_DEBUG_PRINTING: bool = false;
 
-mod filter;
+pub mod filter;
 
 #[cfg(test)]
 mod test {
@@ -44,6 +46,7 @@ mod test {
     use crate::{
         Database, FromRow, HasPartial, MigrationHandler, PartialType, SqlColumn, SqlColumnType,
         SqlTable, TableAsParams, ToTable,
+        filter::{GenericFilter, ToFilter},
     };
 
     #[derive(Debug, PartialEq)]
@@ -67,7 +70,10 @@ mod test {
     }
 
     impl FromRow for PartialCoord {
-        fn try_from_row(_row: &rusqlite::Row, _connection: &rusqlite::Connection) -> Option<Self> {
+        fn try_from_row(
+            _row: &rusqlite::Row,
+            _connection: &rusqlite::Connection,
+        ) -> Result<Self, super::Error> {
             // row.get("x")
             todo!();
         }
@@ -83,10 +89,13 @@ mod test {
     }
 
     impl FromRow for Coord {
-        fn try_from_row(row: &rusqlite::Row, _connection: &rusqlite::Connection) -> Option<Self> {
-            let x: f64 = row.get("x").optional().unwrap()?;
-            let y: f64 = row.get("y").optional().unwrap()?;
-            Some(Self { x, y })
+        fn try_from_row(
+            row: &rusqlite::Row,
+            _connection: &rusqlite::Connection,
+        ) -> Result<Self, super::Error> {
+            let x: f64 = row.get("x").optional().unwrap().unwrap();
+            let y: f64 = row.get("y").optional().unwrap().unwrap();
+            Ok(Self { x, y })
         }
     }
 
@@ -126,6 +135,17 @@ mod test {
 
     struct CoordTable<'a> {
         connection: &'a Connection,
+    }
+
+    #[derive(Default)]
+    struct CoordFilter {
+        generic: GenericFilter,
+    }
+
+    impl ToFilter for CoordFilter {
+        fn to_filter(self) -> GenericFilter {
+            self.generic
+        }
     }
 
     impl<'a> SqlTable<'a> for CoordTable<'a> {
@@ -184,7 +204,11 @@ mod test {
         fn from_connection(connection: &'a Connection) -> Self {
             Self { connection }
         }
+        type FilterType = CoordFilter;
 
+        fn connection(&self) -> &'a Connection {
+            self.connection
+        }
         const INSERT_FAILURE_BEHAVIOR: crate::SqlFailureBehavior =
             crate::SqlFailureBehavior::Ignore;
 
@@ -249,17 +273,10 @@ where
     let mut s = connection.prepare(&sql)?;
     let entries: Vec<_> = s
         .query_map((), |row| {
-            let partial =
-                <T as HasPartial>::Partial::try_from_row(row, connection).unwrap_or_else(|| {
-                    dbg!(
-                        row,
-                        // <<T as HasPartialRepresentation>::Partial as Default>::default()
-                    );
-                    panic!("Partial should always match???")
-                });
+            let partial = <T as HasPartial>::Partial::try_from_row(row, connection).unwrap();
             Ok(<T as MigrationHandler>::migrate(partial, row, connection))
         })?
-        .filter_map(|x| x.ok().flatten())
+        .filter_map(|x| x.ok().transpose().ok().flatten())
         .collect();
 
     let columns = T::columns()
@@ -539,8 +556,17 @@ macro_rules! impl_as_params {
         }
 
         impl ExtractFromRow for $t {
-            fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Option<Self> {
-                row.get(column_name).ok()
+            fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
+                match row.get(column_name) {
+                    Ok(it) => Ok(it),
+                    Err(rusqlite::Error::InvalidColumnName(_)) => {
+                        Err(Error::MissingColumn(column_name.to_string().into()))
+                    }
+                    Err(rusqlite::Error::InvalidColumnType(.., t)) => {
+                        Err(Error::WrongColumnType(stringify!($t).into(), t))
+                    }
+                    Err(err) => unreachable!("Impossible error? {err}"),
+                }
             }
         }
 
@@ -569,8 +595,17 @@ macro_rules! impl_as_params_and_nan_is_none {
         }
 
         impl ExtractFromRow for $t {
-            fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Option<Self> {
-                Some(row.get(column_name).ok().unwrap_or(<$t>::NAN))
+            fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
+                match row.get(column_name) {
+                    Ok(it) => Ok(it),
+                    Err(rusqlite::Error::InvalidColumnName(_)) => {
+                        Err(Error::MissingColumn(column_name.to_string().into()))
+                    }
+                    Err(rusqlite::Error::InvalidColumnType(.., t)) => {
+                        Err(Error::WrongColumnType(stringify!($t).into(), t))
+                    }
+                    Err(err) => unreachable!("Impossible error? {err}"),
+                }
             }
         }
 
@@ -654,17 +689,31 @@ related_sql_column_type!(SqlColumnType::Text, Time);
 related_sql_column_type!(SqlColumnType::Text, Date);
 related_sql_column_type!(SqlColumnType::Text, OffsetDateTime);
 
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("{0}")]
+    Rusqlite(#[from] rusqlite::Error),
+    #[error("No column named {0} could be found.")]
+    MissingColumn(Cow<'static, str>),
+    #[error("Value has type {1}, which could not be converted to {0}.")]
+    WrongColumnType(Cow<'static, str>, rusqlite::types::Type),
+    #[error("Could not migrate value because of this: {0}.")]
+    CouldNotMigrate(Cow<'static, str>),
+    #[error("Todo: {0}")]
+    Todo(String),
+}
+
 pub trait FromRow: Sized {
-    fn try_from_row(row: &rusqlite::Row, connection: &rusqlite::Connection) -> Option<Self>;
+    fn try_from_row(row: &rusqlite::Row, connection: &rusqlite::Connection) -> Result<Self, Error>;
 }
 
 pub trait ExtractFromRow: Sized {
-    fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Option<Self>;
+    fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error>;
     fn try_from_row(
         column_name: &str,
         row: &rusqlite::Row,
         _connection: &rusqlite::Connection,
-    ) -> Option<Self> {
+    ) -> Result<Self, Error> {
         Self::try_from_row_simple(column_name, row)
     }
 }
@@ -693,26 +742,28 @@ where
         partial: Self::Partial,
         row: &rusqlite::Row,
         connection: &rusqlite::Connection,
-    ) -> Option<Self> {
-        partial.transpose()
+    ) -> Result<Self, Error> {
+        partial
+            .transpose()
+            .ok_or(Error::CouldNotMigrate("Missing values".into()))
     }
 }
 
 // TODO: Is this right? Kind of depends on the reason of failure, doesn't it?
 impl<T: ExtractFromRow> ExtractFromRow for Option<T> {
-    fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Option<Self> {
+    fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
         match T::try_from_row_simple(column_name, row) {
-            Some(it) => Some(Some(it)),
-            None => Some(None),
+            Ok(it) => Ok(Some(it)),
+            Err(_) => Ok(None),
         }
     }
 }
 
 impl<T: FromRow> FromRow for Option<T> {
-    fn try_from_row(row: &rusqlite::Row, connection: &rusqlite::Connection) -> Option<Self> {
+    fn try_from_row(row: &rusqlite::Row, connection: &rusqlite::Connection) -> Result<Self, Error> {
         match T::try_from_row(row, connection) {
-            Some(it) => Some(Some(it)),
-            None => Some(None),
+            Ok(it) => Ok(Some(it)),
+            Err(_) => Ok(None),
         }
     }
 }
@@ -795,11 +846,13 @@ impl Display for SqlFailureBehavior {
     }
 }
 
-pub trait SqlTable<'a> {
-    type RowType;
+pub trait SqlTable<'a>: Sized {
+    type RowType: ToTable<'a>;
     type ValueType;
+    type FilterType: filter::ToFilter;
     const INSERT_FAILURE_BEHAVIOR: SqlFailureBehavior;
     fn from_connection(connection: &'a Connection) -> Self;
+    fn connection(&self) -> &'a Connection;
     // fn filter(
     //     &self,
     //     filter: <Self::RowType as HasFilter>::Filter,
@@ -810,6 +863,15 @@ pub trait SqlTable<'a> {
     // ) -> Result<usize, rusqlite::Error>;
 
     fn insert(&self, row: Self::RowType) -> Result<(), rusqlite::Error>;
+    fn load_where(
+        &self,
+        filter: impl FnOnce(Self::FilterType) -> Self::FilterType,
+    ) -> Result<Vec<Self::RowType>, rusqlite::Error> {
+        load_where::<Self>(
+            self.connection(),
+            filter(Self::FilterType::default()).to_filter(),
+        )
+    }
     // fn update(
     //     &self,
     //     filter: <Self::RowType as HasFilter>::Filter,
@@ -902,10 +964,6 @@ pub trait SqlTable<'a> {
 //         generic.columns.into_iter().collect()
 //     }
 // }
-
-pub trait IntoGenericFilter {
-    fn into_generic(self, column_name: Option<Cow<'static, str>>) -> GenericFilter;
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OrderingAscDesc {
@@ -1313,12 +1371,11 @@ where
     Ok(())
 }
 
-pub fn query_table_filtered<'a, T: ToTable<'a>>(
-    connection: &&'a rusqlite::Connection,
-    filter: GenericFilter,
-    order: GenericOrder,
-) -> Result<Vec<T>, rusqlite::Error> {
-    let columns = T::columns()
+fn load_where<'a, T: SqlTable<'a>>(
+    connection: &rusqlite::Connection,
+    filter: filter::GenericFilter,
+) -> Result<Vec<T::RowType>, rusqlite::Error> {
+    let columns = <T::RowType as ToTable>::columns()
         .into_iter()
         .map(|c| c.name)
         .fold(String::new(), |mut acc, cur| {
@@ -1330,44 +1387,74 @@ pub fn query_table_filtered<'a, T: ToTable<'a>>(
                 acc
             }
         });
-    // if !filter
-    //     .columns
-    //     .keys()
-    //     .into_iter()
-    //     .all(|k| T::columns().iter().any(|c| &c.name == k))
-    // {
-    //     todo!("Load missing tables?")
-    // }
-    let mut sql = format!("SELECT {columns} from {}", T::NAME);
-    sql.push(' ');
-    // sql.push_str(&filter.to_sql());
-    sql.push(' ');
-    sql.push_str(&order.to_sql());
-    #[cfg(feature = "debug_sql")]
-    dbg!(&sql);
+    let mut sql = format!("SELECT {columns} from {}", T::RowType::NAME);
+    filter.write_to(&mut sql, true);
     let mut statement = connection.prepare(&sql)?;
     Ok(statement
         .query_map((), |row| {
-            Ok(T::try_from_row(row, &connection).unwrap_or_else(|| {
-                #[cfg(feature = "debug_sql")]
-                dbg!(row);
-                panic!("Failed constructing value from row")
-            }))
+            Ok(
+                T::RowType::try_from_row(row, &connection).unwrap_or_else(|err| {
+                    dbg!(row);
+                    panic!("Failed constructing value from row. sql was {sql}, err was {err}");
+                }),
+            )
         })?
-        .collect::<Result<Vec<T>, _>>()?)
+        .collect::<Result<Vec<T::RowType>, _>>()?)
 }
 
-type GenericFilter = ();
+// pub fn query_table_filtered<'a, T: ToTable<'a>>(
+//     connection: &&'a rusqlite::Connection,
+//     filter: GenericFilter,
+//     order: GenericOrder,
+// ) -> Result<Vec<T>, rusqlite::Error> {
+//     let columns = T::columns()
+//         .into_iter()
+//         .map(|c| c.name)
+//         .fold(String::new(), |mut acc, cur| {
+//             if acc.is_empty() {
+//                 cur.clone().into_owned()
+//             } else {
+//                 acc.push_str(", ");
+//                 acc.push_str(&cur);
+//                 acc
+//             }
+//         });
+//     // if !filter
+//     //     .columns
+//     //     .keys()
+//     //     .into_iter()
+//     //     .all(|k| T::columns().iter().any(|c| &c.name == k))
+//     // {
+//     //     todo!("Load missing tables?")
+//     // }
+//     let mut sql = format!("SELECT {columns} from {}", T::NAME);
+//     sql.push(' ');
+//     // sql.push_str(&filter.to_sql());
+//     sql.push(' ');
+//     sql.push_str(&order.to_sql());
+//     #[cfg(feature = "debug_sql")]
+//     dbg!(&sql);
+//     let mut statement = connection.prepare(&sql)?;
+//     Ok(statement
+//         .query_map((), |row| {
+//             Ok(T::try_from_row(row, &connection).unwrap_or_else(|| {
+//                 #[cfg(feature = "debug_sql")]
+//                 dbg!(row);
+//                 panic!("Failed constructing value from row")
+//             }))
+//         })?
+//         .collect::<Result<Vec<T>, _>>()?)
+// }
 
-pub fn delete_table_filtered<'a, T: ToTable<'a>>(
-    connection: &&'a rusqlite::Connection,
-    filter: GenericFilter,
-) -> Result<usize, rusqlite::Error> {
-    let mut sql = format!("DELETE FROM {}", T::NAME);
-    sql.push(' ');
-    // sql.push_str(&filter.to_sql());
-    #[cfg(feature = "debug_sql")]
-    dbg!(&sql);
-    let mut statement = connection.prepare(&sql)?;
-    Ok(statement.execute(())?)
-}
+// pub fn delete_table_filtered<'a, T: ToTable<'a>>(
+//     connection: &&'a rusqlite::Connection,
+//     filter: GenericFilter,
+// ) -> Result<usize, rusqlite::Error> {
+//     let mut sql = format!("DELETE FROM {}", T::NAME);
+//     sql.push(' ');
+//     // sql.push_str(&filter.to_sql());
+//     #[cfg(feature = "debug_sql")]
+//     dbg!(&sql);
+//     let mut statement = connection.prepare(&sql)?;
+//     Ok(statement.execute(())?)
+// }

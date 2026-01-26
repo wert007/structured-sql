@@ -133,9 +133,13 @@ impl ToTable {
         impl<'a> silo::SqlTable<'a> for #table_name<'a> {
             type RowType = #value_type_name;
             type ValueType = #value_type_name;
+            type FilterType = #filter_name;
 
             const INSERT_FAILURE_BEHAVIOR: silo::SqlFailureBehavior = #on_conflict;
 
+            fn connection(&self) -> &'a silo::rusqlite::Connection {
+                self.connection
+            }
 
             fn insert(&self, row: Self::RowType) -> Result<(), silo::rusqlite::Error> {
                 silo::insert_into_table(&self.connection, row, Self::INSERT_FAILURE_BEHAVIOR)?;
@@ -203,6 +207,10 @@ impl ToTable {
     fn create_row_type(&self) -> proc_macro2::TokenStream {
         row_type::create_row_type(&self.base_struct)
     }
+
+    fn create_filter(&self, tokens: &mut proc_macro2::TokenStream) {
+        tokens.extend(filter::create_filter_for(&self.base_struct));
+    }
 }
 
 impl ToTokens for ToTable {
@@ -214,6 +222,7 @@ impl ToTokens for ToTable {
         tokens.extend(self.create_row_type());
         self.migration_handler.to_tokens(tokens);
         self.create_conversions(tokens);
+        self.create_filter(tokens);
         let path = format!("dbg/to-table-for-{}.rs", self.base_struct.name);
         std::fs::write(&path, tokens.to_string()).unwrap();
         std::process::Command::new("rustfmt")
