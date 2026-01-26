@@ -1,0 +1,402 @@
+<?xml version="1.0" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1038pt" height="969pt" viewBox="0.00 0.00 1038.18 969.04">
+<g id="graph0" class="graph" transform="translate(4,965.0399780273438) scale(1)" data-name="">
+<polygon fill="white" stroke="none" points="-4,4 -4,-965.04 1034.18,-965.04 1034.18,4 -4,4"/>
+<!-- Table -->
+<g id="node1" class="node" pointer-events="visible" data-name="Table">
+
+<ellipse fill="orange" stroke="black" cx="321.49" cy="-152.39" rx="35.39" ry="18"/>
+<text text-anchor="middle" x="321.49" y="-148.19" font-family="Helvetica,sans-Serif" font-size="14.00">Table</text>
+</g>
+<!-- SqlTable -->
+<g id="node19" class="node" pointer-events="visible" data-name="SqlTable">
+
+<polygon fill="lightgray" stroke="black" points="122.76,-183.07 51.24,-183.07 51.24,-147.07 122.76,-147.07 122.76,-183.07"/>
+<text text-anchor="middle" x="87" y="-160.87" font-family="Helvetica,sans-Serif" font-size="14.00">SqlTable</text>
+</g>
+<!-- Table&#45;&gt;SqlTable -->
+<g id="edge5" class="edge" data-name="Table-&gt;SqlTable">
+
+<path fill="none" stroke="black" d="M285.88,-154.31C245.42,-156.5 179.21,-160.08 134.41,-162.51"/>
+<polygon fill="black" stroke="black" points="134.26,-159.01 124.46,-163.05 134.63,-166 134.26,-159.01"/>
+</g>
+<!-- Struct -->
+<g id="node2" class="node" pointer-events="visible" data-name="Struct">
+
+<ellipse fill="yellow" stroke="black" cx="333.81" cy="-517.78" rx="55.78" ry="26.04"/>
+<text text-anchor="middle" x="333.81" y="-510.58" font-family="Helvetica,sans-Serif" font-size="24.00">Struct</text>
+</g>
+<!-- ToRowType -->
+<g id="node8" class="node" pointer-events="visible" data-name="ToRowType">
+
+<polygon fill="none" stroke="black" points="582.02,-491.17 482.52,-491.17 482.52,-455.17 582.02,-455.17 582.02,-491.17"/>
+<text text-anchor="start" x="490.65" y="-469.97" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="494.54" y="-469.97" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">ToRowType</text>
+<text text-anchor="start" x="570.01" y="-469.97" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- Struct&#45;&gt;ToRowType -->
+<g id="edge1" class="edge" data-name="Struct-&gt;ToRowType">
+
+<path fill="none" stroke="black" d="M384.4,-506.41C410.75,-500.49 443.17,-493.2 470.93,-486.96"/>
+<polygon fill="black" stroke="black" points="471.65,-490.38 480.64,-484.78 470.11,-483.55 471.65,-490.38"/>
+</g>
+<!-- HasPartialRepresentation1 -->
+<g id="node13" class="node" pointer-events="visible" data-name="HasPartialRepresentation1">
+
+<polygon fill="none" stroke="black" points="562.25,-644.74 378.63,-644.74 378.63,-608.74 562.25,-608.74 562.25,-644.74"/>
+<text text-anchor="start" x="386.78" y="-623.54" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="390.67" y="-623.54" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">HasPartialRepresentation</text>
+<text text-anchor="start" x="550.2" y="-623.54" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- Struct&#45;&gt;HasPartialRepresentation1 -->
+<g id="edge8" class="edge" data-name="Struct-&gt;HasPartialRepresentation1">
+
+<path fill="none" stroke="black" d="M362.45,-540.62C384.69,-558.36 415.52,-582.95 438.55,-601.31"/>
+<polygon fill="black" stroke="black" points="436.09,-603.83 446.09,-607.32 440.45,-598.35 436.09,-603.83"/>
+</g>
+<!-- Filterable1 -->
+<g id="node14" class="node" pointer-events="visible" data-name="Filterable1">
+
+<polygon fill="none" stroke="black" points="241.42,-662.46 73.39,-662.46 73.39,-626.46 241.42,-626.46 241.42,-662.46"/>
+<text text-anchor="start" x="81.15" y="-641.26" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="85.04" y="-641.26" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">Filterable MustBeEqual</text>
+<text text-anchor="start" x="229.78" y="-641.26" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- Struct&#45;&gt;Filterable1 -->
+<g id="edge20" class="edge" data-name="Struct-&gt;Filterable1">
+
+<path fill="none" stroke="black" d="M303.08,-539.85C272.08,-562.11 224.32,-596.41 192.01,-619.62"/>
+<polygon fill="black" stroke="black" points="190.23,-616.58 184.15,-625.26 194.32,-622.27 190.23,-616.58"/>
+</g>
+<!-- IntoSqlTable -->
+<g id="node9" class="node" pointer-events="visible" data-name="IntoSqlTable">
+
+<polygon fill="none" stroke="black" points="136.81,-469.02 34.04,-469.02 34.04,-433.02 136.81,-433.02 136.81,-469.02"/>
+<text text-anchor="start" x="42.23" y="-447.82" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="46.12" y="-447.82" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">IntoSqlTable</text>
+<text text-anchor="start" x="124.73" y="-447.82" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- Struct&#45;&gt;IntoSqlTable -->
+<g id="edge3" class="edge" data-name="Struct-&gt;IntoSqlTable">
+
+<path fill="none" stroke="black" d="M285.03,-504.67C245.86,-494.14 190.59,-479.28 148.14,-467.87"/>
+<polygon fill="black" stroke="black" points="149.11,-464.51 138.55,-465.29 147.29,-471.27 149.11,-464.51"/>
+</g>
+<!-- RowTypeStruct -->
+<g id="node3" class="node" pointer-events="visible" data-name="RowTypeStruct">
+
+<ellipse fill="none" stroke="black" cx="618.96" cy="-307.32" rx="77.09" ry="18"/>
+<text text-anchor="middle" x="618.96" y="-303.12" font-family="Helvetica,sans-Serif" font-size="14.00">RowTypeStruct</text>
+</g>
+<!-- FromRowType -->
+<g id="node10" class="node" pointer-events="visible" data-name="FromRowType">
+
+<polygon fill="none" stroke="black" points="449.29,-376.34 334.15,-376.34 334.15,-340.34 449.29,-340.34 449.29,-376.34"/>
+<text text-anchor="start" x="341.93" y="-355.14" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="345.82" y="-355.14" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">FromRowType</text>
+<text text-anchor="start" x="437.62" y="-355.14" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- RowTypeStruct&#45;&gt;FromRowType -->
+<g id="edge6" class="edge" data-name="RowTypeStruct-&gt;FromRowType">
+
+<path fill="none" stroke="black" d="M562.5,-320C531.55,-326.94 492.97,-335.61 460.3,-342.94"/>
+<polygon fill="black" stroke="black" points="459.94,-339.44 450.95,-345.04 461.47,-346.27 459.94,-339.44"/>
+</g>
+<!-- HasPartialRepresentationRT -->
+<g id="node17" class="node" pointer-events="visible" data-name="HasPartialRepresentationRT">
+
+<polygon fill="none" stroke="black" points="1030.33,-482.09 846.72,-482.09 846.72,-446.09 1030.33,-446.09 1030.33,-482.09"/>
+<text text-anchor="start" x="854.87" y="-460.89" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="858.76" y="-460.89" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">HasPartialRepresentation</text>
+<text text-anchor="start" x="1018.29" y="-460.89" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- RowTypeStruct&#45;&gt;HasPartialRepresentationRT -->
+<g id="edge14" class="edge" data-name="RowTypeStruct-&gt;HasPartialRepresentationRT">
+
+<path fill="none" stroke="black" d="M654.16,-323.67C690.1,-340.46 747.44,-367.47 796.6,-391.68 828.95,-407.61 865.15,-426.09 892.89,-440.39"/>
+<polygon fill="black" stroke="black" points="891.25,-443.48 901.74,-444.96 894.46,-437.26 891.25,-443.48"/>
+</g>
+<!-- FilterableRT -->
+<g id="node18" class="node" pointer-events="visible" data-name="FilterableRT">
+
+<polygon fill="none" stroke="black" points="615.93,-138.93 447.9,-138.93 447.9,-102.93 615.93,-102.93 615.93,-138.93"/>
+<text text-anchor="start" x="455.66" y="-117.73" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="459.55" y="-117.73" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">Filterable MustBeEqual</text>
+<text text-anchor="start" x="604.28" y="-117.73" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- RowTypeStruct&#45;&gt;FilterableRT -->
+<g id="edge23" class="edge" data-name="RowTypeStruct-&gt;FilterableRT">
+
+<path fill="none" stroke="black" d="M610.46,-289.11C595.24,-256.54 563.28,-188.09 545.17,-149.31"/>
+<polygon fill="black" stroke="black" points="548.5,-148.16 541.09,-140.58 542.15,-151.13 548.5,-148.16"/>
+</g>
+<!-- AsParams -->
+<g id="node22" class="node" pointer-events="visible" data-name="AsParams">
+
+<polygon fill="lightgray" stroke="black" points="650.24,-615.02 570.09,-615.02 570.09,-579.02 650.24,-579.02 650.24,-615.02"/>
+<text text-anchor="middle" x="610.17" y="-592.82" font-family="Helvetica,sans-Serif" font-size="14.00">AsParams</text>
+</g>
+<!-- RowTypeStruct&#45;&gt;AsParams -->
+<g id="edge29" class="edge" data-name="RowTypeStruct-&gt;AsParams">
+
+<path fill="none" stroke="black" d="M618.41,-325.44C616.94,-374 612.89,-507.39 611.07,-567.26"/>
+<polygon fill="black" stroke="black" points="607.58,-566.92 610.78,-577.02 614.58,-567.13 607.58,-566.92"/>
+</g>
+<!-- RowType -->
+<g id="node23" class="node" pointer-events="visible" data-name="RowType">
+
+<polygon fill="lightgray" stroke="black" points="994.35,-240.81 919.09,-240.81 919.09,-204.81 994.35,-204.81 994.35,-240.81"/>
+<text text-anchor="middle" x="956.72" y="-218.61" font-family="Helvetica,sans-Serif" font-size="14.00">RowType</text>
+</g>
+<!-- RowTypeStruct&#45;&gt;RowType -->
+<g id="edge30" class="edge" data-name="RowTypeStruct-&gt;RowType">
+
+<path fill="none" stroke="black" d="M672.48,-293.93C737.1,-277.76 844.88,-250.8 907.5,-235.13"/>
+<polygon fill="black" stroke="black" points="908.33,-238.53 917.18,-232.71 906.63,-231.74 908.33,-238.53"/>
+</g>
+<!-- FromRow -->
+<g id="node24" class="node" pointer-events="visible" data-name="FromRow">
+
+<polygon fill="lightgray" stroke="black" points="987.82,-684.96 911.48,-684.96 911.48,-648.96 987.82,-648.96 987.82,-684.96"/>
+<text text-anchor="middle" x="949.65" y="-662.76" font-family="Helvetica,sans-Serif" font-size="14.00">FromRow</text>
+</g>
+<!-- RowTypeStruct&#45;&gt;FromRow -->
+<g id="edge33" class="edge" data-name="RowTypeStruct-&gt;FromRow">
+
+<path fill="none" stroke="black" d="M621.46,-325.57C625.73,-351.6 636.35,-399.99 659.82,-434.08 669.05,-447.5 843.94,-584.56 917.49,-641.93"/>
+<polygon fill="black" stroke="black" points="915.12,-644.51 925.16,-647.9 919.42,-638.99 915.12,-644.51"/>
+</g>
+<!-- PartialStruct -->
+<g id="node4" class="node" pointer-events="visible" data-name="PartialStruct">
+
+<ellipse fill="yellow" stroke="black" cx="481.15" cy="-934.52" rx="63.76" ry="18"/>
+<text text-anchor="middle" x="481.15" y="-930.32" font-family="Helvetica,sans-Serif" font-size="14.00">PartialStruct</text>
+</g>
+<!-- Partial1 -->
+<g id="node11" class="node" pointer-events="visible" data-name="Partial1">
+
+<polygon fill="none" stroke="black" points="409.31,-749.82 315.14,-749.82 315.14,-713.82 409.31,-713.82 409.31,-749.82"/>
+<text text-anchor="start" x="322.93" y="-728.62" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="326.82" y="-728.62" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">PartialType</text>
+<text text-anchor="start" x="397.63" y="-728.62" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- PartialStruct&#45;&gt;Partial1 -->
+<g id="edge10" class="edge" data-name="PartialStruct-&gt;Partial1">
+
+<path fill="none" stroke="black" d="M470.6,-916.53C449.84,-881.16 403.59,-802.32 378.75,-759.98"/>
+<polygon fill="black" stroke="black" points="381.77,-758.21 373.69,-751.36 375.73,-761.76 381.77,-758.21"/>
+</g>
+<!-- MigrationHandler1 -->
+<g id="node12" class="node" pointer-events="visible" data-name="MigrationHandler1">
+
+<polygon fill="none" stroke="black" points="339.78,-954.72 209.01,-954.72 209.01,-918.72 339.78,-918.72 339.78,-954.72"/>
+<text text-anchor="start" x="217.2" y="-933.52" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="221.09" y="-933.52" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">MigrationHandler</text>
+<text text-anchor="start" x="327.7" y="-933.52" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- PartialStruct&#45;&gt;MigrationHandler1 -->
+<g id="edge12" class="edge" data-name="PartialStruct-&gt;MigrationHandler1">
+
+<path fill="none" stroke="black" d="M417.15,-935.2C396.44,-935.42 373.25,-935.67 351.68,-935.9"/>
+<polygon fill="black" stroke="black" points="351.71,-932.4 341.75,-936 351.78,-939.4 351.71,-932.4"/>
+</g>
+<!-- PartialStruct&#45;&gt;Filterable1 -->
+<g id="edge22" class="edge" data-name="PartialStruct-&gt;Filterable1">
+
+<path fill="none" stroke="black" d="M461.87,-917.24C407.26,-868.32 251.34,-728.62 186.37,-670.41"/>
+<polygon fill="black" stroke="black" points="188.74,-667.84 178.95,-663.77 184.07,-673.05 188.74,-667.84"/>
+</g>
+<!-- Default -->
+<g id="node20" class="node" pointer-events="visible" data-name="Default">
+
+<polygon fill="lightgray" stroke="black" points="715.23,-961.04 654.51,-961.04 654.51,-925.04 715.23,-925.04 715.23,-961.04"/>
+<text text-anchor="middle" x="684.87" y="-938.84" font-family="Helvetica,sans-Serif" font-size="14.00">Default</text>
+</g>
+<!-- PartialStruct&#45;&gt;Default -->
+<g id="edge25" class="edge" data-name="PartialStruct-&gt;Default">
+
+<path fill="none" stroke="black" d="M544.49,-937.17C576.52,-938.51 614.51,-940.09 642.89,-941.28"/>
+<polygon fill="black" stroke="black" points="642.38,-944.76 652.52,-941.68 642.67,-937.77 642.38,-944.76"/>
+</g>
+<!-- HasValue -->
+<g id="node21" class="node" pointer-events="visible" data-name="HasValue">
+
+<polygon fill="lightgray" stroke="black" points="609.78,-772.46 533.37,-772.46 533.37,-736.46 609.78,-736.46 609.78,-772.46"/>
+<text text-anchor="middle" x="571.58" y="-750.26" font-family="Helvetica,sans-Serif" font-size="14.00">HasValue</text>
+</g>
+<!-- PartialStruct&#45;&gt;HasValue -->
+<g id="edge26" class="edge" data-name="PartialStruct-&gt;HasValue">
+
+<path fill="none" stroke="black" d="M490.32,-916.26C506.09,-884.85 538.48,-820.36 557.25,-782.98"/>
+<polygon fill="black" stroke="black" points="560.34,-784.62 561.7,-774.11 554.09,-781.48 560.34,-784.62"/>
+</g>
+<!-- PartialRow -->
+<g id="node25" class="node" pointer-events="visible" data-name="PartialRow">
+
+<polygon fill="lightgray" stroke="black" points="971.45,-933.76 888.07,-933.76 888.07,-897.76 971.45,-897.76 971.45,-933.76"/>
+<text text-anchor="middle" x="929.76" y="-911.56" font-family="Helvetica,sans-Serif" font-size="14.00">PartialRow</text>
+</g>
+<!-- PartialStruct&#45;&gt;PartialRow -->
+<g id="edge34" class="edge" data-name="PartialStruct-&gt;PartialRow">
+
+<path fill="none" stroke="black" d="M542.6,-929.16C574.97,-926.54 615.35,-923.58 651.49,-921.84 729.67,-918.08 820.33,-916.64 876.37,-916.09"/>
+<polygon fill="black" stroke="black" points="876.3,-919.59 886.27,-916 876.24,-912.6 876.3,-919.59"/>
+</g>
+<!-- PartialRowType -->
+<g id="node5" class="node" pointer-events="visible" data-name="PartialRowType">
+
+<ellipse fill="none" stroke="black" cx="744.55" cy="-735.8" rx="79.39" ry="18"/>
+<text text-anchor="middle" x="744.55" y="-731.6" font-family="Helvetica,sans-Serif" font-size="14.00">PartialRowType</text>
+</g>
+<!-- PartialRT -->
+<g id="node15" class="node" pointer-events="visible" data-name="PartialRT">
+
+<polygon fill="none" stroke="black" points="795.98,-588.77 701.8,-588.77 701.8,-552.77 795.98,-552.77 795.98,-588.77"/>
+<text text-anchor="start" x="709.6" y="-567.57" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="713.49" y="-567.57" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">PartialType</text>
+<text text-anchor="start" x="784.29" y="-567.57" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- PartialRowType&#45;&gt;PartialRT -->
+<g id="edge16" class="edge" data-name="PartialRowType-&gt;PartialRT">
+
+<path fill="none" stroke="black" d="M745.03,-717.51C745.78,-689.13 747.22,-634.24 748.12,-600.23"/>
+<polygon fill="black" stroke="black" points="751.6,-600.75 748.37,-590.66 744.61,-600.56 751.6,-600.75"/>
+</g>
+<!-- MigrationHandlerRT -->
+<g id="node16" class="node" pointer-events="visible" data-name="MigrationHandlerRT">
+
+<polygon fill="none" stroke="black" points="793.6,-430.88 662.83,-430.88 662.83,-394.88 793.6,-394.88 793.6,-430.88"/>
+<text text-anchor="start" x="671.02" y="-409.68" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="674.91" y="-409.68" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">MigrationHandler</text>
+<text text-anchor="start" x="781.51" y="-409.68" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+</g>
+<!-- PartialRowType&#45;&gt;MigrationHandlerRT -->
+<g id="edge18" class="edge" data-name="PartialRowType-&gt;MigrationHandlerRT">
+
+<path fill="none" stroke="black" d="M736.69,-717.63C725.55,-690.77 705.7,-638.61 698.4,-591.97 690.09,-538.86 706.08,-477.04 717.68,-441.67"/>
+<polygon fill="black" stroke="black" points="720.86,-443.19 720.77,-432.6 714.24,-440.94 720.86,-443.19"/>
+</g>
+<!-- PartialRowType&#45;&gt;Default -->
+<g id="edge27" class="edge" data-name="PartialRowType-&gt;Default">
+
+<path fill="none" stroke="black" d="M739.26,-754.19C728.88,-790.21 705.81,-870.34 693.31,-913.74"/>
+<polygon fill="black" stroke="black" points="689.98,-912.65 690.57,-923.23 696.71,-914.59 689.98,-912.65"/>
+</g>
+<!-- PartialRowType&#45;&gt;HasValue -->
+<g id="edge28" class="edge" data-name="PartialRowType-&gt;HasValue">
+
+<path fill="none" stroke="black" d="M672.2,-743.6C655.06,-745.45 637.17,-747.38 621.3,-749.09"/>
+<polygon fill="black" stroke="black" points="621.22,-745.58 611.65,-750.13 621.97,-752.54 621.22,-745.58"/>
+</g>
+<!-- PartialRowType&#45;&gt;AsParams -->
+<g id="edge31" class="edge" data-name="PartialRowType-&gt;AsParams">
+
+<path fill="none" stroke="black" d="M727.26,-717.94C704,-693.92 662.48,-651.04 635.64,-623.33"/>
+<polygon fill="black" stroke="black" points="638.35,-621.09 628.87,-616.34 633.32,-625.96 638.35,-621.09"/>
+</g>
+<!-- PartialRowType&#45;&gt;FromRow -->
+<g id="edge32" class="edge" data-name="PartialRowType-&gt;FromRow">
+
+<path fill="none" stroke="black" d="M789.82,-720.61C822.6,-709.6 866.89,-694.74 900.53,-683.45"/>
+<polygon fill="black" stroke="black" points="901.25,-686.9 909.62,-680.4 899.03,-680.26 901.25,-686.9"/>
+</g>
+<!-- PartialRowType&#45;&gt;PartialRow -->
+<g id="edge35" class="edge" data-name="PartialRowType-&gt;PartialRow">
+
+<path fill="none" stroke="black" d="M762.99,-753.71C795.82,-785.62 864.56,-852.4 902.74,-889.5"/>
+<polygon fill="black" stroke="black" points="900.16,-891.87 909.77,-896.33 905.03,-886.85 900.16,-891.87"/>
+</g>
+<!-- StructFilter -->
+<g id="node6" class="node" pointer-events="visible" data-name="StructFilter">
+
+<ellipse fill="yellow" stroke="black" cx="57.72" cy="-865.77" rx="57.94" ry="18"/>
+<text text-anchor="middle" x="57.72" y="-861.57" font-family="Helvetica,sans-Serif" font-size="14.00">StructFilter</text>
+</g>
+<!-- RowTypeFilter -->
+<g id="node7" class="node" pointer-events="visible" data-name="RowTypeFilter">
+
+<ellipse fill="none" stroke="black" cx="791.29" cy="-108" rx="73.07" ry="18"/>
+<text text-anchor="middle" x="791.29" y="-103.8" font-family="Helvetica,sans-Serif" font-size="14.00">RowTypeFilter</text>
+</g>
+<!-- ToRowType&#45;&gt;RowTypeStruct -->
+<g id="edge2" class="edge" data-name="ToRowType-&gt;RowTypeStruct">
+
+<path fill="none" stroke="black" d="M541.88,-454.79C557.02,-425.82 586.54,-369.35 604.32,-335.32"/>
+<polygon fill="black" stroke="black" points="607.21,-337.36 608.74,-326.87 601.01,-334.11 607.21,-337.36"/>
+</g>
+<!-- FromRowType&#45;&gt;Struct -->
+<g id="edge7" class="edge" data-name="FromRowType-&gt;Struct">
+
+<path fill="none" stroke="black" d="M385.08,-376.63C375.84,-402.06 358.92,-448.64 347.05,-481.32"/>
+<polygon fill="black" stroke="black" points="343.88,-479.8 343.75,-490.39 350.46,-482.19 343.88,-479.8"/>
+</g>
+<!-- Partial1&#45;&gt;Struct -->
+<g id="edge11" class="edge" data-name="Partial1-&gt;Struct">
+
+<path fill="none" stroke="black" d="M359.8,-713.57C355.17,-678.69 344.98,-601.93 338.82,-555.56"/>
+<polygon fill="black" stroke="black" points="342.3,-555.14 337.51,-545.69 335.36,-556.06 342.3,-555.14"/>
+</g>
+<!-- MigrationHandler1&#45;&gt;Struct -->
+<g id="edge13" class="edge" data-name="MigrationHandler1-&gt;Struct">
+
+<path fill="none" stroke="black" d="M276.98,-918.45C286.01,-854.83 316.16,-642.21 328.49,-555.29"/>
+<polygon fill="black" stroke="black" points="331.92,-556.02 329.86,-545.63 324.99,-555.04 331.92,-556.02"/>
+</g>
+<!-- HasPartialRepresentation1&#45;&gt;PartialStruct -->
+<g id="edge9" class="edge" data-name="HasPartialRepresentation1-&gt;PartialStruct">
+
+<path fill="none" stroke="black" d="M471.07,-645.08C472.86,-696.39 477.93,-841.86 480.12,-904.84"/>
+<polygon fill="black" stroke="black" points="476.62,-904.9 480.46,-914.77 483.61,-904.66 476.62,-904.9"/>
+</g>
+<!-- Filterable1&#45;&gt;StructFilter -->
+<g id="edge21" class="edge" data-name="Filterable1-&gt;StructFilter">
+
+<path fill="none" stroke="black" d="M149.08,-662.95C131.7,-701.53 91.46,-790.86 70.67,-837.01"/>
+<polygon fill="black" stroke="black" points="67.49,-835.56 66.57,-846.11 73.87,-838.43 67.49,-835.56"/>
+</g>
+<!-- PartialRT&#45;&gt;RowTypeStruct -->
+<g id="edge17" class="edge" data-name="PartialRT-&gt;RowTypeStruct">
+
+<path fill="none" stroke="black" d="M734.84,-552.69C715.71,-527.36 681.38,-479.34 659.82,-434.08 644.55,-402.04 632.9,-362.85 626.02,-336.6"/>
+<polygon fill="black" stroke="black" points="629.44,-335.82 623.58,-326.99 622.65,-337.55 629.44,-335.82"/>
+</g>
+<!-- MigrationHandlerRT&#45;&gt;RowTypeStruct -->
+<g id="edge19" class="edge" data-name="MigrationHandlerRT-&gt;RowTypeStruct">
+
+<path fill="none" stroke="black" d="M709.18,-394.49C691.61,-377.51 665.33,-352.12 645.66,-333.11"/>
+<polygon fill="black" stroke="black" points="648.12,-330.63 638.5,-326.19 643.26,-335.66 648.12,-330.63"/>
+</g>
+<!-- HasPartialRepresentationRT&#45;&gt;PartialRowType -->
+<g id="edge15" class="edge" data-name="HasPartialRepresentationRT-&gt;PartialRowType">
+
+<path fill="none" stroke="black" d="M925.5,-482.34C892.16,-529.03 803.62,-653.05 764.09,-708.43"/>
+<polygon fill="black" stroke="black" points="761.37,-706.23 758.4,-716.4 767.06,-710.29 761.37,-706.23"/>
+</g>
+<!-- FilterableRT&#45;&gt;RowTypeFilter -->
+<g id="edge24" class="edge" data-name="FilterableRT-&gt;RowTypeFilter">
+
+<path fill="none" stroke="black" d="M616.13,-116.73C645.51,-115.27 678.46,-113.62 707.78,-112.16"/>
+<polygon fill="black" stroke="black" points="707.92,-115.66 717.74,-111.67 707.58,-108.67 707.92,-115.66"/>
+</g>
+<!-- IntoSqlTable&#45;&gt;Table -->
+<g id="edge4" class="edge" data-name="IntoSqlTable-&gt;Table">
+
+<path fill="none" stroke="black" d="M99.84,-432.78C140.22,-381.7 254.57,-237.04 301.26,-177.98"/>
+<polygon fill="black" stroke="black" points="303.76,-180.47 307.21,-170.45 298.26,-176.13 303.76,-180.47"/>
+</g>
+<!-- Legend -->
+<g id="node26" class="node" pointer-events="visible" data-name="Legend">
+
+<polygon fill="yellow" stroke="none" points="91.5,-89.5 91.5,-111.5 222.5,-111.5 222.5,-89.5 91.5,-89.5"/>
+<polygon fill="none" stroke="black" points="91.5,-89.5 91.5,-111.5 222.5,-111.5 222.5,-89.5 91.5,-89.5"/>
+<text text-anchor="start" x="98.25" y="-95.9" font-family="Helvetica,sans-Serif" font-size="14.00">Public facing struct</text>
+<polygon fill="none" stroke="black" points="91.5,-62.5 91.5,-84.5 222.5,-84.5 222.5,-62.5 91.5,-62.5"/>
+<text text-anchor="start" x="114.59" y="-68.9" font-family="Helvetica,sans-Serif" font-size="14.00">Internal struct</text>
+<polygon fill="none" stroke="black" points="91.5,-35.5 91.5,-57.5 222.5,-57.5 222.5,-35.5 91.5,-35.5"/>
+<text text-anchor="start" x="94.38" y="-42.9" font-family="Helvetica,sans-Serif" font-style="italic" font-size="14.00">Transformative Trait</text>
+<polygon fill="lightgray" stroke="none" points="91.5,-8.5 91.5,-30.5 222.5,-30.5 222.5,-8.5 91.5,-8.5"/>
+<polygon fill="none" stroke="black" points="91.5,-8.5 91.5,-30.5 222.5,-30.5 222.5,-8.5 91.5,-8.5"/>
+<text text-anchor="start" x="119.28" y="-14.9" font-family="Helvetica,sans-Serif" font-size="14.00">Marker Trait</text>
+</g>
+</g>
+</svg>
