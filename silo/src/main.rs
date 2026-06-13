@@ -8,10 +8,17 @@ struct AddressTT {
     street: String,
 }
 
-// #[derive(Default, Debug, Clone, ToColumns)]
-// struct AddressC {
-//     city: String,
-//     street: String,
+#[derive(Default, Debug, Clone, ToColumns)]
+struct AddressTC {
+    city: String,
+    street: String,
+}
+
+// #[derive(Debug, silo::derive::ToColumns)]
+// enum MovieRole {
+//     FilmStar,
+//     Director,
+//     Watcher,
 // }
 
 #[derive(Default, Debug, Clone, silo::derive::ToTable)]
@@ -20,7 +27,8 @@ struct Person {
     age: u8,
     // #[silo(foreign)]
     // residence: AddressTT,
-    residence: AddressTT,
+    residence: AddressTC,
+    // role: MovieRole,
 }
 
 fn main() {

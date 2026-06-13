@@ -66,8 +66,26 @@ pub(crate) fn create_as_params(
         }
     } else {
         quote! {
-            impl #_trait for #name {
+            impl AsColumns for #name {
                 const COLUMN_COUNT: usize = 0 #(+ <#column_types as silo::AsParams>::COLUMN_COUNT)*;
+
+                fn columns(parent: Option<&str>) -> Vec<SqlColumn> {
+                    let mut result = Vec::with_capacity(Self::COLUMN_COUNT);
+                    #(
+                        result.push(SqlColumn {
+                            name: parent.map(|p| format!("{p}_{}", stringify!(#name)).into()).unwrap_or(stringify!(#name).into()),
+                        })
+                    )*
+                    vec![SqlColumn {
+                        name: parent.unwrap().to_string().into(),
+                        r#type: T::SQL_COLUMN_TYPE,
+                        is_primary: false,
+                        is_unique: false,
+                    }]
+                }
+            }
+
+            impl #_trait for #name {
                 fn as_params<'a>(&'a self) -> Vec<&'a dyn silo::rusqlite::ToSql> {
                     use silo::{AsParams};
                     let mut result = Vec::with_capacity(<Self as #_trait>::COLUMN_COUNT);

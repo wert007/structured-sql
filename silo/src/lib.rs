@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use chrono::{DateTime, Utc};
 pub use rusqlite;
 use rusqlite::{Connection, types::Null};
 
@@ -511,9 +512,13 @@ fn compare_columns(actual: &[SqlColumn], expected: &[SqlColumn]) -> bool {
     return !necessary_alternations.is_empty();
 }
 
-pub trait AsParams {
+pub trait AsColumns {
     const COLUMN_COUNT: usize;
 
+    fn columns(parent: Option<&str>) -> Vec<SqlColumn>;
+}
+
+pub trait AsParams: AsColumns {
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
 }
 
@@ -523,8 +528,7 @@ pub trait TableAsParams {
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql>;
 }
 
-impl<T: AsParams> AsParams for Option<T> {
-    const COLUMN_COUNT: usize = T::COLUMN_COUNT;
+impl<T: AsParams + AsColumns> AsParams for Option<T> {
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
         match self {
             Some(it) => it.as_params(),
@@ -532,6 +536,15 @@ impl<T: AsParams> AsParams for Option<T> {
         }
     }
 }
+
+impl<T: AsColumns> AsColumns for Option<T> {
+    const COLUMN_COUNT: usize = T::COLUMN_COUNT;
+
+    fn columns(parent: Option<&str>) -> Vec<SqlColumn> {
+        T::columns(parent)
+    }
+}
+
 impl<T: TableAsParams> TableAsParams for Option<T> {
     const COLUMN_COUNT: usize = T::COLUMN_COUNT;
     fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
@@ -542,14 +555,34 @@ impl<T: TableAsParams> TableAsParams for Option<T> {
     }
 }
 
+pub trait IsSingleColumn {
+    const SQL_COLUMN_TYPE: SqlColumnType;
+}
+
+impl<T: IsSingleColumn> AsColumns for T {
+    const COLUMN_COUNT: usize = 1;
+
+    fn columns(parent: Option<&str>) -> Vec<SqlColumn> {
+        vec![SqlColumn {
+            name: parent.unwrap().to_string().into(),
+            r#type: T::SQL_COLUMN_TYPE,
+            is_primary: false,
+            is_unique: false,
+        }]
+    }
+}
+
 macro_rules! impl_as_params {
-    ($t:ty) => {
+    ($t:ty, $column_type:expr) => {
         impl HasPartial for $t {
             type Partial = Option<$t>;
         }
 
+        impl IsSingleColumn for $t {
+            const SQL_COLUMN_TYPE: SqlColumnType = $column_type;
+        }
+
         impl AsParams for $t {
-            const COLUMN_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
             }
@@ -582,13 +615,16 @@ macro_rules! impl_as_params {
 }
 
 macro_rules! impl_as_params_and_nan_is_none {
-    ($t:ty) => {
+    ($t:ty, $column_type:expr) => {
         impl HasPartial for $t {
             type Partial = Option<$t>;
         }
 
+        impl IsSingleColumn for $t {
+            const SQL_COLUMN_TYPE: SqlColumnType = $column_type;
+        }
+
         impl AsParams for $t {
-            const COLUMN_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
             }
@@ -621,13 +657,16 @@ macro_rules! impl_as_params_and_nan_is_none {
 }
 
 macro_rules! impl_as_params_and_column_filter {
-    ($t:ty) => {
+    ($t:ty, $column_type:expr) => {
         impl<'a> HasPartial for $t {
             type Partial = Option<$t>;
         }
 
+        impl<'a> IsSingleColumn for $t {
+            const SQL_COLUMN_TYPE: SqlColumnType = $column_type;
+        }
+
         impl<'a> AsParams for $t {
-            const COLUMN_COUNT: usize = 1;
             fn as_params<'b>(&'b self) -> Vec<&'b dyn rusqlite::ToSql> {
                 vec![self]
             }
@@ -644,50 +683,52 @@ macro_rules! impl_as_params_and_column_filter {
     };
 }
 
-impl_as_params!(bool);
-impl_as_params!(Time);
-impl_as_params!(Date);
-impl_as_params!(OffsetDateTime);
-impl_as_params!(i8);
-impl_as_params!(i16);
-impl_as_params!(i32);
-impl_as_params!(i64);
-impl_as_params!(isize);
-impl_as_params!(u8);
-impl_as_params!(u16);
-impl_as_params!(u32);
-impl_as_params!(usize);
-impl_as_params!(u64);
-impl_as_params_and_nan_is_none!(f32);
-impl_as_params_and_nan_is_none!(f64);
-impl_as_params!(String);
-impl_as_params_and_column_filter!(&'a str);
+impl_as_params!(bool, SqlColumnType::Integer);
+impl_as_params!(i8, SqlColumnType::Integer);
+impl_as_params!(i16, SqlColumnType::Integer);
+impl_as_params!(i32, SqlColumnType::Integer);
+impl_as_params!(i64, SqlColumnType::Integer);
+impl_as_params!(isize, SqlColumnType::Integer);
+impl_as_params!(u8, SqlColumnType::Integer);
+impl_as_params!(u16, SqlColumnType::Integer);
+impl_as_params!(u32, SqlColumnType::Integer);
+impl_as_params!(usize, SqlColumnType::Integer);
+impl_as_params!(u64, SqlColumnType::Integer);
+impl_as_params!(Time, SqlColumnType::Text);
+impl_as_params!(Date, SqlColumnType::Text);
+impl_as_params!(DateTime<Utc>, SqlColumnType::Text);
+impl_as_params!(OffsetDateTime, SqlColumnType::Text);
+impl_as_params_and_nan_is_none!(f32, SqlColumnType::Float);
+impl_as_params_and_nan_is_none!(f64, SqlColumnType::Float);
+impl_as_params!(String, SqlColumnType::Text);
+impl_as_params_and_column_filter!(&'a str, SqlColumnType::Text);
 
-macro_rules! related_sql_column_type {
-    ($v:path, $t:ty) => {
-        // impl HasSqlColumnType for $t {
-        //     const SQL_COLUMN_TYPE: SqlColumnType = $v;
-        // }
-    };
-}
+// macro_rules! related_sql_column_type {
+//     ($v:path, $t:ty) => {
+//         impl HasSqlColumnType for $t {
+//             const SQL_COLUMN_TYPE: SqlColumnType = $v;
+//         }
+//     };
+// }
 
-related_sql_column_type!(SqlColumnType::Integer, bool);
-related_sql_column_type!(SqlColumnType::Integer, i8);
-related_sql_column_type!(SqlColumnType::Integer, i16);
-related_sql_column_type!(SqlColumnType::Integer, i32);
-related_sql_column_type!(SqlColumnType::Integer, i64);
-related_sql_column_type!(SqlColumnType::Integer, isize);
-related_sql_column_type!(SqlColumnType::Integer, u8);
-related_sql_column_type!(SqlColumnType::Integer, u16);
-related_sql_column_type!(SqlColumnType::Integer, u32);
-related_sql_column_type!(SqlColumnType::Integer, u64);
-related_sql_column_type!(SqlColumnType::Integer, usize);
-related_sql_column_type!(SqlColumnType::Float, f32);
-related_sql_column_type!(SqlColumnType::Float, f64);
-related_sql_column_type!(SqlColumnType::Text, String);
-related_sql_column_type!(SqlColumnType::Text, Time);
-related_sql_column_type!(SqlColumnType::Text, Date);
-related_sql_column_type!(SqlColumnType::Text, OffsetDateTime);
+// related_sql_column_type!(SqlColumnType::Integer, bool);
+// related_sql_column_type!(SqlColumnType::Integer, i8);
+// related_sql_column_type!(SqlColumnType::Integer, i16);
+// related_sql_column_type!(SqlColumnType::Integer, i32);
+// related_sql_column_type!(SqlColumnType::Integer, i64);
+// related_sql_column_type!(SqlColumnType::Integer, isize);
+// related_sql_column_type!(SqlColumnType::Integer, u8);
+// related_sql_column_type!(SqlColumnType::Integer, u16);
+// related_sql_column_type!(SqlColumnType::Integer, u32);
+// related_sql_column_type!(SqlColumnType::Integer, u64);
+// related_sql_column_type!(SqlColumnType::Integer, usize);
+// related_sql_column_type!(SqlColumnType::Float, f32);
+// related_sql_column_type!(SqlColumnType::Float, f64);
+// related_sql_column_type!(SqlColumnType::Text, String);
+// related_sql_column_type!(SqlColumnType::Text, Time);
+// related_sql_column_type!(SqlColumnType::Text, Date);
+// related_sql_column_type!(SqlColumnType::Text, OffsetDateTime);
+// related_sql_column_type!(SqlColumnType::Text, Datetime<T>);
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
