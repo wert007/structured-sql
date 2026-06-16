@@ -251,7 +251,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6adcc45088fbcbe7963bdca7bda19ab4214ffd794c6ef88813a3cb983ba7d881"
 dependencies = [
- "itertools",
+ "itertools 0.11.0",
  "proc-macro2",
  "syn",
 ]
@@ -267,6 +267,15 @@ name = "itertools"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
 dependencies = [
  "either",
 ]
@@ -475,6 +484,7 @@ dependencies = [
  "strum",
  "thiserror",
  "time",
+ "uuid",
 ]
 
 [[package]]
@@ -483,6 +493,7 @@ version = "0.1.0"
 dependencies = [
  "heck",
  "ident_case_conversions",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn",
@@ -633,6 +644,16 @@ dependencies = [
  "mutants",
  "proc-macro2",
  "shadow_counted",
+]
+
+[[package]]
+name = "uuid"
+version = "1.23.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "144d6b123cef80b301b8f72a9e2ca4370ddec21950d0a103dd22c437006d2db7"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]

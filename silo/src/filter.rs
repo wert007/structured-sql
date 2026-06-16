@@ -1,96 +1,163 @@
-use std::borrow::Cow;
+use crate::{AsParams, ToSqlDyn};
+use chrono::{DateTime, Utc};
 use std::fmt::Write;
+use uuid::{NonNilUuid, Uuid};
 
-pub trait ToFilter: Default {
-    fn to_filter(self) -> GenericFilter;
-}
-
-#[derive(Default)]
-pub enum GenericFilter {
-    #[default]
+pub enum FieldFilter<T: IsFieldFilter> {
     None,
-    And(Vec<GenericFilter>),
-    Or(Vec<GenericFilter>),
-    Not(Box<GenericFilter>),
-    Field(FieldFilter),
+    Not(Box<FieldFilter<T>>),
+    Contains(T),
+    Equals(T),
 }
-impl GenericFilter {
-    pub(crate) fn write_to(&self, sql: &mut String, needs_where: bool) {
-        match self {
-            GenericFilter::None => {}
-            GenericFilter::And(generic_filters) => {
-                if needs_where {
-                    write!(sql, " WHERE ").unwrap();
-                }
-                write!(sql, "(").unwrap();
-                for (i, and) in generic_filters.iter().enumerate() {
-                    if i != 0 {
-                        write!(sql, " AND ").unwrap();
-                    }
-                    and.write_to(sql, false);
-                }
-                write!(sql, ")").unwrap();
-            }
-            GenericFilter::Or(generic_filters) => {
-                if needs_where {
-                    write!(sql, " WHERE ").unwrap();
-                }
-                write!(sql, "(").unwrap();
-                for (i, or) in generic_filters.iter().enumerate() {
-                    if i != 0 {
-                        write!(sql, " OR ").unwrap();
-                    }
-                    or.write_to(sql, false);
-                }
-                write!(sql, ")").unwrap();
-            }
-            GenericFilter::Not(not) => {
-                if needs_where {
-                    write!(sql, " WHERE ").unwrap();
-                }
 
-                write!(sql, "NOT ").unwrap();
-                not.write_to(sql, false);
+impl<T: IsFieldFilter> FieldFilter<T> {
+    pub fn contains_not(t: &T) -> Self {
+        Self::not(Self::contains(t))
+    }
+
+    pub fn contains(t: &T) -> Self {
+        Self::Contains(t.clone())
+    }
+
+    pub fn equals(t: &T) -> Self {
+        Self::Equals(t.clone())
+    }
+
+    pub fn not(f: FieldFilter<T>) -> FieldFilter<T> {
+        Self::Not(Box::new(f))
+    }
+}
+
+impl<T: IsFieldFilter> AsParams for FieldFilter<T> {
+    fn as_params<'b>(&'b self) -> Vec<crate::ToSqlDyn<'b>> {
+        match self {
+            FieldFilter::None => Vec::new(),
+            FieldFilter::Not(field_filter) => field_filter.as_params(),
+            FieldFilter::Contains(it) | FieldFilter::Equals(it) => vec![ToSqlDyn::Borrowed(it)],
+        }
+    }
+}
+
+impl<T: IsFieldFilter> Default for FieldFilter<T> {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+pub trait Filter: AsParams {
+    fn to_sql(&self, sql: &mut String, parent: Option<&str>);
+}
+
+impl<T: IsFieldFilter> Filter for FieldFilter<T> {
+    fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
+        match self {
+            FieldFilter::None => {}
+            FieldFilter::Not(field_filter) => {
+                ensure_where_or_and(sql);
+                _ = write!(sql, " NOT (");
+                field_filter.to_sql(sql, parent);
+                _ = write!(sql, ")");
             }
-            GenericFilter::Field(field_filter) => {
-                if needs_where {
-                    write!(sql, " WHERE ").unwrap();
-                }
-                field_filter.write_to(sql);
+            FieldFilter::Contains(it) => {
+                ensure_where_or_and(sql);
+                <T as IsFieldFilter>::to_sql(
+                    it,
+                    sql,
+                    ComparisonOperator::Like,
+                    parent.expect("Needs a column name for comparison."),
+                );
+            }
+            FieldFilter::Equals(it) => {
+                ensure_where_or_and(sql);
+                <T as IsFieldFilter>::to_sql(
+                    it,
+                    sql,
+                    ComparisonOperator::Equals,
+                    parent.expect("Needs a column name for comparison."),
+                );
             }
         }
     }
 }
 
-pub struct FieldFilter {
-    pub field: Cow<'static, str>,
-    pub value: String,
-    pub operator: FilterOperator,
-}
-
-impl FieldFilter {
-    fn write_to(&self, sql: &mut String) {
-        let operator = match self.operator {
-            FilterOperator::Equals => "=",
-            FilterOperator::NotEquals => "!=",
-            FilterOperator::LessThan => "<",
-            FilterOperator::LessThanEquals => "<=",
-            FilterOperator::GreaterThan => ">",
-            FilterOperator::GreaterThanEquals => ">=",
-            FilterOperator::Like => "LIKE",
-            FilterOperator::Glob => "GLOB",
-        };
-        write!(sql, "{} {operator} {}", &self.field, &self.value).unwrap();
+fn ensure_where_or_and(sql: &mut String) {
+    if !["AND", "(", "WHERE"]
+        .into_iter()
+        .any(|s| sql.trim().ends_with(s))
+    {
+        _ = write!(sql, " AND")
     }
 }
 
-pub enum FilterOperator {
+pub trait Filterable {
+    type Filter: Filter;
+}
+
+macro_rules! impl_filterable {
+    ($t:ty) => {
+        impl_filterable!($t, $t);
+        impl IsFieldFilter for $t {
+            fn to_sql(&self, sql: &mut String, operator: ComparisonOperator, parent: &str) {
+                _ = write!(sql, "{parent} {operator} ");
+                self.write_to_sql(sql, operator);
+            }
+        }
+    };
+    ($t:ty, $f:ty) => {
+        impl Filterable for $t {
+            type Filter = FieldFilter<$f>;
+        }
+    };
+}
+
+impl_filterable!(DateTime<Utc>, String);
+impl_filterable!(NonNilUuid, String);
+impl_filterable!(Uuid, String);
+impl_filterable!(String);
+impl_filterable!(bool);
+impl_filterable!(u8);
+impl_filterable!(u64);
+
+macro_rules! impl_write_to_sql_as_to_string {
+    ($t:ty) => {
+        impl WriteToSql for $t {
+            fn write_to_sql(&self, sql: &mut String, _operator: ComparisonOperator) {
+                _ = write!(sql, "{self}");
+            }
+        }
+    };
+}
+
+impl_write_to_sql_as_to_string!(u8);
+impl_write_to_sql_as_to_string!(u64);
+
+impl WriteToSql for bool {
+    fn write_to_sql(&self, sql: &mut String, _operator: ComparisonOperator) {
+        _ = write!(sql, "{}", *self as usize);
+    }
+}
+impl WriteToSql for String {
+    fn write_to_sql(&self, sql: &mut String, operator: ComparisonOperator) {
+        let surroundings = match operator {
+            ComparisonOperator::Like => "%",
+            _ => "",
+        };
+        _ = write!(sql, "'{surroundings}{self}{surroundings}'");
+    }
+}
+
+#[derive(Debug, strum::Display)]
+pub enum ComparisonOperator {
+    #[strum(to_string = "=")]
     Equals,
-    NotEquals,
-    LessThan,
-    LessThanEquals,
-    GreaterThan,
-    GreaterThanEquals,
+    #[strum(to_string = "LIKE")]
     Like,
-    Glob,
+}
+
+pub trait WriteToSql {
+    fn write_to_sql(&self, sql: &mut String, operator: ComparisonOperator);
+}
+
+pub trait IsFieldFilter: rusqlite::ToSql + Clone + WriteToSql {
+    fn to_sql(&self, sql: &mut String, operator: ComparisonOperator, parent: &str);
 }

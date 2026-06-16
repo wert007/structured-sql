@@ -1,14 +1,16 @@
-#[derive(Default, Debug, Clone, silo::derive::ToTable)]
-// #[silo(primary_key)]
-struct AddressTT {
-    // pk: PrimaryKey,
-    #[silo(primary)]
-    pk: u64,
-    city: String,
-    street: String,
-}
+// #[derive(Default, Debug, Clone, silo::derive::ToTable)]
+// // #[silo(primary_key)]
+// struct AddressTT {
+//     // pk: PrimaryKey,
+//     #[silo(primary)]
+//     pk: u64,
+//     city: String,
+//     street: String,
+// }
 
-#[derive(Default, Debug, Clone, ToColumns)]
+use uuid::Uuid;
+
+#[derive(Default, Debug, Clone)]
 struct AddressTC {
     city: String,
     street: String,
@@ -25,9 +27,11 @@ struct AddressTC {
 struct Person {
     name: String,
     age: u8,
+    #[silo(unique)]
+    id: Uuid,
     // #[silo(foreign)]
     // residence: AddressTT,
-    residence: AddressTC,
+    // residence: AddressTC,
     // role: MovieRole,
 }
 
@@ -40,25 +44,25 @@ fn main() {
         .insert(Person {
             name: "Johnny English".into(),
             age: 58,
-            residence: AddressTT {
-                pk: 0,
-                city: "Toronot".into(),
-                street: "Bakerstreet 221b".into(),
-            },
+            id: Uuid::max(),
+            // residence: AddressTC {
+            //     city: "Toronot".into(),
+            //     street: "Bakerstreet 221b".into(),
+            // },
         })
         .unwrap();
+    dbg!(persons.load_where(Default::default()).unwrap());
     db.save("file.sqlite").unwrap();
 
-    // persons.load_all();
-    let r = persons
-        .load_where(|f| {
-            f.and(
-                f.name_equals("Johnny English"),
-                f.or(f.age_less_than(60), f.age_greater_than(70)),
-            )
-        })
-        .unwrap();
-    dbg!(r);
+    // let r = persons
+    //     .load_where(|f| {
+    //         f.and(
+    //             f.name_equals("Johnny English"),
+    //             f.or(f.age_less_than(60), f.age_greater_than(70)),
+    //         )
+    //     })
+    //     .unwrap();
+    // dbg!(r);
     // persons.load_where(|f| {
     //     f.name_equals("Johnny english")
     //         .and()

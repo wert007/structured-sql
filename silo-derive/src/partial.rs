@@ -15,6 +15,14 @@ pub(crate) fn create_partial_for(
     let partial_type = create_partial_type_for(base_struct);
     // let variant_field = base_struct.variant_field().map(|f| f.name).into_iter();
     let field_names: Vec<_> = base_struct.fields().into_iter().map(|f| f.name).collect();
+    let is_unique = base_struct
+        .columns()
+        .into_iter()
+        .map(|c| syn::LitBool::new(c.is_unique, c.span));
+    let is_primary = base_struct
+        .columns()
+        .into_iter()
+        .map(|c| syn::LitBool::new(c.is_primary, c.span));
     let fields = base_struct
         .fields()
         .into_iter()
@@ -43,6 +51,28 @@ pub(crate) fn create_partial_for(
             type Partial = #partial_name;
         }
 
+        impl silo::AsColumnsOptional for #partial_name {
+            fn columns_skip_optional(
+        &self,
+        parent: Option<&str>,
+        is_unique: bool,
+        is_primary: bool,
+    ) -> Vec<silo::SqlColumn> {
+        let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
+                let mut result = Vec::new();
+                #(result.append(&mut self.#field_names.columns_skip_optional(Some(&format!("{parent}{}", stringify!(#field_names))), #is_unique, #is_primary));)*
+                result
+    }
+        }
+
+        impl silo::AsParamsOptional for #partial_name {
+            fn as_params_skip_optional<'b>(&'b self) -> Vec<silo::ToSqlDyn<'b>> {
+                let mut result = Vec::new();
+                #(result.append(&mut self.#field_names.as_params_skip_optional());)*
+                result
+            }
+        }
+
         #into
 
         // impl silo::HasValue for #partial_name {
@@ -51,25 +81,25 @@ pub(crate) fn create_partial_for(
         //     }
         // }
 
-        impl silo::PartialRow for #partial_name {
-            fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
-                // TODO: Use with_capacity
-                let mut result = Vec::new();
-                #(
-                    result.extend(self.#field_names.used_column_names(Some(column_name.clone().map(|c| format!("{c}_{}", stringify!(#field_names))).unwrap_or_else(|| stringify!(#field_names).to_string()))));
-                )*
-                result
-            }
-            fn used_values(&self) -> Vec<&dyn silo::rusqlite::ToSql> {
-                    // TODO: Use with_capacity
-                let mut result = Vec::new();
-                #(
-                    result.extend(self.#field_names.used_values());
-                )*
-                result
+        // impl silo::PartialRow for #partial_name {
+        //     fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
+        //         // TODO: Use with_capacity
+        //         let mut result = Vec::new();
+        //         #(
+        //             result.extend(self.#field_names.used_column_names(Some(column_name.clone().map(|c| format!("{c}_{}", stringify!(#field_names))).unwrap_or_else(|| stringify!(#field_names).to_string()))));
+        //         )*
+        //         result
+        //     }
+        //     fn used_values(&self) -> Vec<&dyn silo::rusqlite::ToSql> {
+        //             // TODO: Use with_capacity
+        //         let mut result = Vec::new();
+        //         #(
+        //             result.extend(self.#field_names.used_values());
+        //         )*
+        //         result
 
-            }
-        }
+        //     }
+        // }
     });
 }
 

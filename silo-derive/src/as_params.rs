@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use quote::quote;
 
 pub(crate) fn create_as_params(
@@ -7,130 +8,45 @@ pub(crate) fn create_as_params(
 ) {
     let name = &base_struct.name;
     let columns = base_struct.columns();
-    let column_types = columns.iter().map(|c| &c.type_);
-    let names = columns.iter().map(|c| syn::Ident::new(&c.name, c.span));
-    let _trait = if for_table {
-        quote! {silo::TableAsParams}
-    } else {
-        quote! {silo::AsParams}
-    };
-    let as_params = if let Some(variant) = base_struct.variant_field() {
-        let partial_name = base_struct.partial_name();
-        let variant_types = base_struct
-            .variants_fields()
-            .into_iter()
-            .map(|v| v.into_iter().map(|f| f.type_).collect::<Vec<_>>())
-            .collect::<Vec<_>>();
-        let mut previous_types = Vec::new();
-        for (i, t) in variant_types.iter().enumerate() {
-            let mut types = Vec::new();
-            for i in 0..i {
-                types.extend(variant_types[i].clone());
+    let is_primary = columns
+        .iter()
+        .map(|c| syn::LitBool::new(c.is_primary, c.span));
+    let is_unique = columns
+        .iter()
+        .map(|c| syn::LitBool::new(c.is_unique, c.span));
+    let column_types = columns.iter().map(|c| &c.type_).collect_vec();
+    let names = columns
+        .iter()
+        .map(|c| syn::Ident::new(&c.name, c.span))
+        .collect_vec();
+    let as_params = quote! {
+            impl silo::AsColumns for #name {
+                const COLUMN_COUNT: usize = 0 #(+ <#column_types as silo::AsColumns>::COLUMN_COUNT)*;
             }
-            previous_types.push(types);
-        }
-        let variants_pattern = base_struct.variant_patterns();
-        let variants_fields = base_struct
-            .variants_fields()
-            .into_iter()
-            .map(|v| v.into_iter().map(|v| v.name()).collect::<Vec<_>>())
-            .collect::<Vec<_>>();
-        quote! {
-            impl #_trait for #name {
-                fn as_params<'a>(&'a self) -> Vec<&'a dyn silo::rusqlite::ToSql> {
-                    use silo::{EnumHelper, AsParams};
-                    let mut result: Vec<&'a dyn silo::rusqlite::ToSql> = Vec::with_capacity(Self::COLUMN_COUNT);
-                    result.push(self.variant_ref());
-                    match self {
-                        #(#variants_pattern => {
-                            for _ in 0..(0#(+ <#previous_types>::COLUMN_COUNT)*) {
-                                result.push(&silo::rusqlite::types::Null);
-                            }
-                            #(result.extend(#variants_fields.as_params());)*
-                        })*
-                    }
-                    while result.len() < Self::COLUMN_COUNT {
-                        result.push(&silo::rusqlite::types::Null);
-                    }
-                    // #(if let Some(value) = partial.#names {
-                    // } else {
-                    //     result.extend([&silo::rus]);
 
-                    // })*
-                    // #(
-                    //     result.extend(self.#names.as_params());
-                    // )*
+            impl silo::AsColumnsDynamicallySized for #name {
+                fn columns(parent: Option<&str>, is_unique: bool, is_primary: bool) -> Vec<silo::SqlColumn> {
+                    assert!(!is_unique);
+                    assert!(!is_primary);
+                    let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
+                    let mut result = Vec::with_capacity(<Self as silo::AsColumns>::COLUMN_COUNT);
+                    #(
+                        result.append(&mut <#column_types as silo::AsColumnsDynamicallySized>::columns(Some(&format!("{parent}{}", stringify!(#names))), #is_unique, #is_primary));
+                    )*
                     result
                 }
             }
-        }
-    } else {
-        quote! {
-            impl AsColumns for #name {
-                const COLUMN_COUNT: usize = 0 #(+ <#column_types as silo::AsParams>::COLUMN_COUNT)*;
 
-                fn columns(parent: Option<&str>) -> Vec<SqlColumn> {
-                    let mut result = Vec::with_capacity(Self::COLUMN_COUNT);
-                    #(
-                        result.push(SqlColumn {
-                            name: parent.map(|p| format!("{p}_{}", stringify!(#name)).into()).unwrap_or(stringify!(#name).into()),
-                        })
-                    )*
-                    vec![SqlColumn {
-                        name: parent.unwrap().to_string().into(),
-                        r#type: T::SQL_COLUMN_TYPE,
-                        is_primary: false,
-                        is_unique: false,
-                    }]
-                }
-            }
-
-            impl #_trait for #name {
-                fn as_params<'a>(&'a self) -> Vec<&'a dyn silo::rusqlite::ToSql> {
+            impl silo::AsParams for #name {
+                fn as_params<'a>(&'a self) -> Vec<silo::ToSqlDyn<'a>> {
                     use silo::{AsParams};
-                    let mut result = Vec::with_capacity(<Self as #_trait>::COLUMN_COUNT);
+                    let mut result = Vec::with_capacity(<Self as silo::AsColumns>::COLUMN_COUNT);
                     #(
                         result.extend(AsParams::as_params(&self.#names));
                     )*
                     result
                 }
             }
-        }
-    };
-    tokens.extend(as_params);
-}
-
-pub(crate) fn create_as_params_for_pk(
-    base_struct: &crate::base_struct::StructData,
-    tokens: &mut proc_macro2::TokenStream,
-) {
-    let Some(pk) = base_struct.primary_key_field() else {
-        return;
-    };
-    let pk_name = pk.name;
-    let name = &base_struct.name;
-    let as_params = quote! {
-        impl silo::AsForeignReference for #name {
-            fn insert_as_foreign_reference(
-                self,
-                connection: &rusqlite::Connection,
-            ) -> Result<(), rusqlite::Error> {
-                use silo::SqlTable;
-                let db = unsafe {silo::Database::from_connection(connection)}?;
-                let table = db.load::<Self>()?;
-                table.insert(self)?;
-                Ok(())
-            }
-        }
-
-        impl silo::AsParams for #name {
-            const COLUMN_COUNT: usize = 1;
-            fn as_params<'a>(&'a self) -> Vec<&'a dyn silo::rusqlite::ToSql> {
-                let mut result = Vec::with_capacity(Self::COLUMN_COUNT);
-                result.extend(self.#pk_name.as_params());
-                result
-            }
-        }
     };
     tokens.extend(as_params);
 }

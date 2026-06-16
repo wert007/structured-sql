@@ -13,19 +13,6 @@ pub(crate) fn create_into_sql_table(
         impl<'a> silo::ToTable<'a> for #name {
             type Table = #table_name<'a>;
             const NAME: &'static str = stringify!(#name);
-            // const COLUMNS: &'static [silo::SqlColumn] = silo::concat_sql_columns!(&[#(#columns,)*]);
-
-            fn fill_columns(columns: &mut Vec<silo::SqlColumn>) {
-                #(columns.extend(#columns);)*
-            }
-
-            fn insert_foreign_references(self, connection: &silo::rusqlite::Connection) -> Result<(), silo::rusqlite::Error> {
-                use silo::AsForeignReference;
-                #(
-                    self.#field_names.insert_as_foreign_reference(connection)?;
-                )*
-                Ok(())
-            }
         }
     }
 }

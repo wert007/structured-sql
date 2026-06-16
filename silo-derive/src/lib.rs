@@ -118,61 +118,25 @@ impl ToTable {
             connection: &'a silo::rusqlite::Connection,
         }
 
-        impl<'a> #table_name<'a> {
-            fn default_order() -> silo::GenericOrder {
-                let mut result = silo::GenericOrder::default();
-                #(result.add(stringify!(#iterable_remaining_elements), silo::Ordering {
-                    asc_desc: Some(silo::OrderingAscDesc::Descending),
-                    nulls: Some(silo::OrderingNulls::NullsLast),
-                });)*
-                result
-            }
-        }
-
-
         impl<'a> silo::SqlTable<'a> for #table_name<'a> {
             type RowType = #value_type_name;
             type ValueType = #value_type_name;
             type FilterType = #filter_name;
 
-            const INSERT_FAILURE_BEHAVIOR: silo::SqlFailureBehavior = #on_conflict;
-
             fn connection(&self) -> &'a silo::rusqlite::Connection {
                 self.connection
             }
 
-            fn insert(&self, row: Self::RowType) -> Result<(), silo::rusqlite::Error> {
-                silo::insert_into_table(&self.connection, row, Self::INSERT_FAILURE_BEHAVIOR)?;
-                Ok(())
+            fn insert(&self, row: Self::RowType) -> Result<bool, silo::rusqlite::Error> {
+                silo::insert_into_table(&self.connection, row)
             }
 
-            // fn filter(&self, filter: #filter_name) -> Result<Vec<#value_type_name>, silo::rusqlite::Error> {
-            //     use silo::IntoGenericFilter;
-            //     let mut generic = filter;//.into_generic(&mut self.string_storage.lock().unwrap(), None);
-            //     silo::query_table_filtered::<Self::RowType, Self::ValueType>(&self.connection, &mut self.string_storage.lock().unwrap(), generic, Self::default_order())
-            // }
-
-            // fn delete(&self, filter: #filter_name) -> Result<usize, silo::rusqlite::Error> {
-            //     use silo::IntoGenericFilter;
-            //     let generic = filter;//.into_generic(&mut self.string_storage.lock().unwrap(), None);
-            //     silo::delete_table_filtered::<Self::RowType>(&self.connection, generic)
-            // }
-
-
-            // fn update(&self, filter: #filter_name, updated: #partial_name) -> Result<(), silo::rusqlite::Error> {
-            //     use silo::IntoGenericFilter;
-            //     let generic = filter;//.into_generic(&mut self.string_storage.lock().unwrap(), None);
-            //     silo::update_rows::<Self::RowType>(&self.connection, generic, updated)?;
-            //     Ok(())
-            // }
-
-            // fn migrate(&self, actual_columns: &[silo::SqlColumn]) -> Result<(), silo::rusqlite::Error> {
-            //     silo::handle_migration::<Self::RowType>(
-            //         self.connection,
-            //         &mut self.string_storage.lock().unwrap(),
-            //         actual_columns,
-            //     )
-            // }
+            fn load_where(&self, filter: Self::FilterType) -> Result<Vec<Self::RowType>, silo::rusqlite::Error> {
+                silo::load_where(&self.connection, filter)
+            }
+            fn update(&self, filter: Self::FilterType, updated: #partial_name) -> Result<usize, silo::rusqlite::Error> {
+                silo::update::<#value_type_name, #partial_name>(&self.connection, filter, updated)
+            }
 
             fn from_connection(connection: &'a silo::rusqlite::Connection) -> Self {
                 Self { connection }
@@ -186,17 +150,17 @@ impl ToTable {
     // }
 
     fn create_conversions(&self, tokens: &mut proc_macro2::TokenStream) {
-        if self.base_struct.variant_field().is_some() {
-            enum_helper::create_enum_helper_for(&self.base_struct, tokens);
-        }
+        // if self.base_struct.variant_field().is_some() {
+        //     enum_helper::create_enum_helper_for(&self.base_struct, tokens);
+        // }
         from_row::create_from_row_for(&self.base_struct, tokens);
         partial::create_partial_for(&self.base_struct, false, tokens);
         // TODO: ToColumns would use false here!
         as_params::create_as_params(&self.base_struct, tokens, true);
-        as_params::create_as_params_for_pk(&self.base_struct, tokens);
-        if let Some(pk) = self.base_struct.primary_key_field() {
-            to_columns::create_to_columns_for_pk(&self.base_struct, pk, tokens)
-        }
+        // as_params::create_as_params_for_pk(&self.base_struct, tokens);
+        // if let Some(pk) = self.base_struct.primary_key_field() {
+        //     to_columns::create_to_columns_for_pk(&self.base_struct, pk, tokens)
+        // }
     }
 
     fn create_into_sql_table(&self) -> proc_macro2::TokenStream {
@@ -219,26 +183,26 @@ impl ToTokens for ToTable {
         let table = self.create_table();
         tokens.extend(table);
         tokens.extend(self.create_into_sql_table());
-        tokens.extend(self.create_row_type());
-        self.migration_handler.to_tokens(tokens);
+        // tokens.extend(self.create_row_type());
+        // self.migration_handler.to_tokens(tokens);
         self.create_conversions(tokens);
         self.create_filter(tokens);
-        let path = format!("dbg/to-table-for-{}.rs", self.base_struct.name);
-        std::fs::write(&path, tokens.to_string()).unwrap();
-        std::process::Command::new("rustfmt")
-            .args([
-                "--emit",
-                "files",
-                "--edition",
-                "2024",
-                "--style-edition",
-                "2024",
-                &path,
-            ])
-            .spawn()
-            .unwrap()
-            .wait()
-            .unwrap();
+        // let path = format!("dbg/to-table-for-{}.rs", self.base_struct.name);
+        // std::fs::write(&path, tokens.to_string()).unwrap();
+        // std::process::Command::new("rustfmt")
+        //     .args([
+        //         "--emit",
+        //         "files",
+        //         "--edition",
+        //         "2024",
+        //         "--style-edition",
+        //         "2024",
+        //         &path,
+        //     ])
+        //     .spawn()
+        //     .unwrap()
+        //     .wait()
+        //     .unwrap();
     }
 }
 

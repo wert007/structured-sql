@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Type, parse_quote};
@@ -9,56 +10,64 @@ pub(crate) fn create_filter_for(
 ) -> proc_macro2::TokenStream {
     let visibility = &base_struct.visibility;
     let filter_name = base_struct.filter_name();
-    let mut filter_functions = quote!();
-    for field in base_struct.fields() {
-        for operator in get_operators_for_type(field.type_) {
-            let fn_name = format_ident!("{}_{}", field.name, operator.fn_name);
-            let type_ = &operator.argument_type;
-            let field_name = field.name;
-            let value_conversion = &operator.value_conversion;
-            let filter_operator = operator.filter_operator;
-            filter_functions.extend(quote! {
-                fn #fn_name(&self, value: #type_) -> Self {
-                    let value = #value_conversion;
-                    Self {
-                        generic: silo::filter::GenericFilter::Field(silo::filter::FieldFilter {
-                            field: stringify!(#field_name).into(),
-                            value,
-                            operator: #filter_operator,
-                        })
-                    }
-                }
-            });
-        }
-    }
+    let name = &base_struct.name;
+    // let mut filter_functions = quote!();
+    // for field in base_struct.fields() {
+    //     for operator in get_operators_for_type(field.type_) {
+    //         let fn_name = format_ident!("{}_{}", field.name, operator.fn_name);
+    //         let type_ = &operator.argument_type;
+    //         let field_name = field.name;
+    //         let value_conversion = &operator.value_conversion;
+    //         let filter_operator = operator.filter_operator;
+    //         filter_functions.extend(quote! {
+    //             fn #fn_name(&self, value: #type_) -> Self {
+    //                 let value = #value_conversion;
+    //                 Self {
+    //                     generic: silo::filter::GenericFilter::Field(silo::filter::FieldFilter {
+    //                         field: stringify!(#field_name).into(),
+    //                         value,
+    //                         operator: #filter_operator,
+    //                     })
+    //                 }
+    //             }
+    //         });
+    //     }
+    // }
+    let fields = base_struct
+        .fields()
+        .into_iter()
+        .map(|f| f.name)
+        .collect_vec();
+    let field_types = base_struct.fields().into_iter().map(|f| f.type_);
     quote! {
         #[derive(Default)]
         #visibility struct #filter_name {
-            generic: silo::filter::GenericFilter
+            #(pub #fields: <#field_types as silo::filter::Filterable>::Filter,)*
         }
 
-        impl #filter_name {
-            fn or(&self, lhs: Self, rhs: Self) -> Self {
-                Self {
-                    generic: silo::filter::GenericFilter::Or(vec![lhs.generic, rhs.generic]),
+        impl silo::filter::Filter for #filter_name {
+            fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
+                let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
+                #(
+                    self.#fields.to_sql(sql, Some(&format!("{parent}{}", stringify!(#fields))));
+                )*
+            }
+        }
+
+        impl silo::AsParams for #filter_name {
+            fn as_params<'a>(&'a self) -> Vec<silo::ToSqlDyn<'a>> {
+                    use silo::{AsParams};
+                    let mut result = Vec::new();
+                    #(
+                        result.extend(AsParams::as_params(&self.#fields));
+                    )*
+                    result
                 }
-            }
-
-            fn and(&self, lhs: Self, rhs: Self) -> Self {
-                Self {
-                    generic: silo::filter::GenericFilter::And(vec![lhs.generic, rhs.generic]),
-                }
-            }
-
-            #filter_functions
         }
 
-        impl silo::filter::ToFilter for #filter_name {
-            fn to_filter(self) -> silo::filter::GenericFilter {
-                self.generic
-            }
+        impl silo::filter::Filterable for #name {
+            type Filter = #filter_name;
         }
-
     }
 }
 
