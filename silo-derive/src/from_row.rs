@@ -18,7 +18,7 @@ pub(crate) fn create_from_row_for_base_struct(
     } else {
         let partial = base_struct.partial_name();
         quote!(
-            use silo::PartialType;
+            use silo::partial::PartialType;
             #partial::try_from_row(row, connection)?.transpose().ok_or(silo::Error::Todo("Improve error handling here, so we know which column was missing".into()))
         )
     };

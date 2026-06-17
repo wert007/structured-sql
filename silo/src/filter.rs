@@ -1,4 +1,4 @@
-use crate::{AsParams, ToSqlDyn};
+use crate::{AsParams, ToSqlDyn, conversions::ToSqlValueString};
 use chrono::{DateTime, Utc};
 use std::fmt::Write;
 use uuid::{NonNilUuid, Uuid};
@@ -91,11 +91,19 @@ fn ensure_where_or_and(sql: &mut String) {
 
 pub trait Filterable {
     type Filter: Filter;
+
+    fn convert_to_equals_filter(self) -> Self::Filter;
 }
 
 macro_rules! impl_filterable {
     ($t:ty) => {
-        impl_filterable!($t, $t);
+        impl Filterable for $t {
+            type Filter = FieldFilter<$t>;
+            fn convert_to_equals_filter(self) -> Self::Filter {
+                FieldFilter::Equals(self)
+            }
+        }
+
         impl IsFieldFilter for $t {
             fn to_sql(&self, sql: &mut String, operator: ComparisonOperator, parent: &str) {
                 _ = write!(sql, "{parent} {operator} ");
@@ -106,6 +114,9 @@ macro_rules! impl_filterable {
     ($t:ty, $f:ty) => {
         impl Filterable for $t {
             type Filter = FieldFilter<$f>;
+            fn convert_to_equals_filter(self) -> Self::Filter {
+                FieldFilter::Equals(self.to_sql_value_string())
+            }
         }
     };
 }

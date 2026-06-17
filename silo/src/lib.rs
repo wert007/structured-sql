@@ -9,6 +9,10 @@ use chrono::{DateTime, Utc};
 pub use rusqlite;
 use rusqlite::{Connection, ErrorCode, Params, types::Null};
 
+mod error;
+pub mod partial;
+pub use error::Error;
+mod conversions;
 pub mod filter;
 
 pub static DEBUG_SQL: AtomicBool = AtomicBool::new(false);
@@ -133,20 +137,30 @@ impl Database {
     }
 }
 
+/// This trait represents the columns, that may be part of a struct. Each Column
+/// has all information needed to create the correct table, given the table
+/// name. But this does not need to be a table. You could e.g. have a
+/// Coordinate, which would have to columns, which might be just a part of a
+/// different struct somewhere else.
 pub trait AsColumns: AsColumnsDynamicallySized {
     const COLUMN_COUNT: usize;
-
-    // fn columns(parent: Option<&str>, is_unique: bool, is_primary: bool) -> Vec<SqlColumn>;
 }
 
+/// This part actually generates the columns. Right now the differentiation
+/// between AsColumns and AsColumnsDynamicallySized is not important at all and
+/// is never used. But it has been prepared in case it is needed at some point.
 pub trait AsColumnsDynamicallySized {
     fn columns(parent: Option<&str>, is_unique: bool, is_primary: bool) -> Vec<SqlColumn>;
 }
 
+/// This trait turns an actual value into all the params (Arguments) that
+/// rusqlite would take to fill in ?1.
 pub trait AsParams {
     fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>>;
 }
 
+/// This trait will skip fields, where its value are None, this allows for
+/// [`Partial`] Updates.
 pub trait AsColumnsOptional {
     fn columns_skip_optional(
         &self,
@@ -156,6 +170,8 @@ pub trait AsColumnsOptional {
     ) -> Vec<SqlColumn>;
 }
 
+/// This trait will skip fields, where its value are None, this allows for
+/// [`Partial`] Updates.
 pub trait AsParamsOptional {
     fn as_params_skip_optional<'b>(&'b self) -> Vec<ToSqlDyn<'b>>;
 }
@@ -205,6 +221,8 @@ impl<T: AsColumnsDynamicallySized> AsColumnsDynamicallySized for Option<T> {
     }
 }
 
+/// This type can be represented in a single sql column. This also implements
+/// AsColumns for free.
 pub trait IsSingleColumn {
     const SQL_COLUMN_TYPE: SqlColumnType;
 }
@@ -253,7 +271,7 @@ macro_rules! impl_as_params {
 
 macro_rules! impl_as_params_base {
     ($t:ty, $column_type:expr) => {
-        impl<'a> HasPartial for $t {
+        impl<'a> partial::HasPartial for $t {
             type Partial = Option<$t>;
         }
 
@@ -329,27 +347,6 @@ impl_as_params!(OffsetDateTime, SqlColumnType::Text);
 impl_as_params!(f32, SqlColumnType::Float);
 impl_as_params!(f64, SqlColumnType::Float);
 impl_as_params!(String, SqlColumnType::Text);
-// impl_as_params!(&'a str, SqlColumnType::Text);
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("{0}")]
-    Rusqlite(#[from] rusqlite::Error),
-    #[error("No column named {0} could be found.")]
-    MissingColumn(Cow<'static, str>),
-    #[error("Value has type {1}, which could not be converted to {0}.")]
-    WrongColumnType(Cow<'static, str>, rusqlite::types::Type),
-    #[error("Could not migrate value because of this: {0}.")]
-    CouldNotMigrate(Cow<'static, str>),
-    #[error("Todo: {0}")]
-    Todo(String),
-    #[error("IllFormattedColumn: {1} cannot be parsed into {0}: {2:?}")]
-    IllFormattedColumn(
-        Cow<'static, str>,
-        String,
-        Option<Box<dyn std::error::Error>>,
-    ),
-}
 
 pub trait FromRow: Sized {
     fn try_from_row(row: &rusqlite::Row, connection: &rusqlite::Connection) -> Result<Self, Error>;
@@ -364,22 +361,6 @@ pub trait ExtractFromRow: Sized {
     ) -> Result<Self, Error> {
         Self::try_from_row_simple(column_name, row)
     }
-}
-
-pub trait PartialType<T> {
-    fn transpose(self) -> Option<T>;
-}
-
-impl<T> PartialType<T> for Option<T> {
-    fn transpose(self) -> Option<T> {
-        self
-    }
-}
-
-pub trait HasPartial<T = Self>: Sized + Into<Self::Partial> {
-    // TODO: find out why we do not have partial type here!
-    type Partial: Default;
-    // type Partial: PartialType<T>;
 }
 
 // TODO: Is this right? Kind of depends on the reason of failure, doesn't it?
@@ -404,36 +385,9 @@ impl<T: FromRow> FromRow for Option<T> {
 pub trait ToTable<'a>: AsParams + AsColumns + FromRow {
     const NAME: &'static str;
     type Table: SqlTable<'a>;
-
-    // fn columns() -> Vec<SqlColumn> {
-    //     let mut result = Vec::with_capacity(Self::COLUMN_COUNT);
-    //     Self::fill_columns(&mut result);
-    //     result
-    // }
-
-    // fn fill_columns(columns: &mut Vec<SqlColumn>);
 }
 
-// #[diagnostic::on_unimplemented(
-//     message = "ToColumns is not implemented for `{Self}`",
-//     label = "My Label",
-//     note = "You can either add an primary_key or derive ToColumns.",
-//     note = "Read documentation on ToColumns for more information."
-// )]
-// pub trait ToColumns: AsParams + AsColumns + FromRow {
-//     fn columns() -> Vec<SqlColumn> {
-//         let mut result = Vec::with_capacity(Self::COLUMN_COUNT);
-//         Self::fill_columns(&mut result);
-//         result
-//     }
-
-//     fn fill_columns(columns: &mut Vec<SqlColumn>);
-// }
-
-impl<'a, T: ToTable<'a>> ToTable<'a> for Option<T>
-// where
-//     Option<<T as HasPartialRepresentation>::Partial>: From<Option<T>>,
-{
+impl<'a, T: ToTable<'a>> ToTable<'a> for Option<T> {
     const NAME: &'static str = T::NAME;
 
     type Table = T::Table;
@@ -463,18 +417,21 @@ impl<'a, T: ToTable<'a>> ToTable<'a> for Option<T>
 
 pub trait SqlTable<'a>: Sized {
     type RowType: ToTable<'a>;
-    type ValueType: HasPartial;
+    type ValueType: partial::HasPartial;
     type FilterType: filter::Filter;
     // const INSERT_FAILURE_BEHAVIOR: SqlFailureBehavior;
     fn from_connection(connection: &'a Connection) -> Self;
     fn connection(&self) -> &'a Connection;
 
     fn insert(&self, row: Self::RowType) -> Result<bool, rusqlite::Error>;
-    fn load_where(&self, filter: Self::FilterType) -> Result<Vec<Self::RowType>, rusqlite::Error>;
+    fn load_where(
+        &self,
+        filter: impl Into<Self::FilterType>,
+    ) -> Result<Vec<Self::RowType>, rusqlite::Error>;
     fn update(
         &self,
-        filter: Self::FilterType,
-        updated: <Self::ValueType as HasPartial>::Partial,
+        filter: impl Into<Self::FilterType>,
+        updated: <Self::ValueType as partial::HasPartial>::Partial,
     ) -> Result<usize, rusqlite::Error>;
     // fn count(
     //     &self,
@@ -573,170 +530,6 @@ pub struct Ordering {
 //     }
 // }
 
-// #[derive(Debug, Default)]
-// pub struct GenericFilter {
-//     pub columns: HashMap<Cow<'static, str>, SqlColumnFilter<SqlValue>>,
-// }
-
-// impl GenericFilter {
-//     pub fn insert(
-//         &mut self,
-//         name: Cow<'static, str>,
-//         value: impl IntoSqlColumnFilter,
-//         string_storage: &mut StaticStringStorage,
-//     ) {
-//         Self::insert_into_columns(name, &mut self.columns, value, string_storage);
-//     }
-
-//     pub fn insert_into_columns(
-//         name: Cow<'static, str>,
-//         columns: &mut HashMap<Cow<'static, str>, SqlColumnFilter<SqlValue>>,
-//         value: impl IntoSqlColumnFilter,
-//         string_storage: &mut StaticStringStorage,
-//     ) {
-//         let values = value.into_sql_column_filter(name, string_storage);
-//         for (name, value) in values {
-//             columns.insert(name, value.clone());
-//         }
-//     }
-
-//     fn get_params(&self) -> () {
-//         ()
-//     }
-
-//     fn to_sql(&self) -> String {
-//         use std::fmt::Write;
-//         if !self
-//             .columns
-//             .iter()
-//             .any(|c| !matches!(c.1, SqlColumnFilter::Ignored))
-//         {
-//             return String::new();
-//         }
-//         let mut result: String = "WHERE".into();
-//         let mut emitted = false;
-//         for (name, filter) in &self.columns {
-//             if matches!(filter, SqlColumnFilter::Ignored) {
-//                 continue;
-//             }
-//             if emitted {
-//                 write!(result, " AND").expect("Infallibe");
-//             }
-//             write!(result, " {name} {}", filter.to_sql()).expect("Infallible");
-//             emitted = true;
-//         }
-//         result
-//     }
-// }
-
-// pub struct PrimaryKey;
-
-#[derive(Debug, Clone)]
-pub enum SqlValue {
-    Float(f64),
-    Integer(i64),
-    Null,
-    Text(String),
-    Blob(Vec<u8>),
-}
-
-impl Into<SqlValue> for f64 {
-    fn into(self) -> SqlValue {
-        SqlValue::Float(self)
-    }
-}
-
-impl Into<SqlValue> for f32 {
-    fn into(self) -> SqlValue {
-        SqlValue::Float(self as f64)
-    }
-}
-
-macro_rules! into_sql_value_integer {
-    ($t:ty) => {
-        impl Into<SqlValue> for $t {
-            fn into(self) -> SqlValue {
-                SqlValue::Integer(self as i64)
-            }
-        }
-    };
-}
-
-into_sql_value_integer!(bool);
-into_sql_value_integer!(i8);
-into_sql_value_integer!(i16);
-into_sql_value_integer!(i32);
-into_sql_value_integer!(i64);
-into_sql_value_integer!(isize);
-into_sql_value_integer!(u8);
-into_sql_value_integer!(u16);
-into_sql_value_integer!(u32);
-into_sql_value_integer!(usize);
-into_sql_value_integer!(u64);
-
-impl Into<SqlValue> for String {
-    fn into(self) -> SqlValue {
-        SqlValue::Text(self)
-    }
-}
-
-impl Into<SqlValue> for &str {
-    fn into(self) -> SqlValue {
-        SqlValue::Text(self.into())
-    }
-}
-
-impl Into<SqlValue> for Time {
-    fn into(self) -> SqlValue {
-        const TIME_FORMAT: &[FormatItem<'_>] = format_description!(
-            version = 2,
-            "[hour]:[minute][optional [:[second][optional [.[subsecond]]]]]"
-        );
-        SqlValue::Text(self.format(&TIME_FORMAT).unwrap())
-    }
-}
-
-impl Into<SqlValue> for Date {
-    fn into(self) -> SqlValue {
-        const DATE_FORMAT: &[FormatItem<'_>] =
-            format_description!(version = 2, "[year]-[month]-[day]");
-        SqlValue::Text(self.format(&DATE_FORMAT).unwrap())
-    }
-}
-
-impl Into<SqlValue> for OffsetDateTime {
-    fn into(self) -> SqlValue {
-        const OFFSET_DATE_TIME_ENCODING: &[FormatItem<'_>] = format_description!(
-            version = 2,
-            "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond][offset_hour sign:mandatory]:[offset_minute]"
-        );
-        SqlValue::Text(self.format(&OFFSET_DATE_TIME_ENCODING).unwrap())
-    }
-}
-
-impl SqlValue {
-    fn to_sql(&self) -> String {
-        match self {
-            SqlValue::Float(it) => it.to_string(),
-            SqlValue::Integer(it) => it.to_string(),
-            SqlValue::Null => "NULL".to_string(),
-            SqlValue::Text(it) => {
-                format!("'{}'", it.replace('\'', "''"))
-            }
-            SqlValue::Blob(_items) => todo!(),
-        }
-    }
-}
-
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub enum SqlColumnDefinition {
-//     Prefixed {
-//         prefix: &'static str,
-//         children: &'static [SqlColumnDefinition],
-//     },
-//     Column(SqlColumn),
-// }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SqlColumn {
     pub name: Cow<'static, str>,
@@ -784,50 +577,6 @@ impl SqlColumnType {
         }
     }
 }
-
-// pub trait PartialRow {
-//     fn used_column_names(&self, column_name: Option<String>) -> Vec<String>;
-//     fn used_values(&self) -> Vec<&dyn rusqlite::ToSql>;
-// }
-
-// impl<T: AsParams> PartialRow for Option<T> {
-//     fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
-//         if self.is_some() {
-//             vec![column_name.expect("Needs column name!")]
-//         } else {
-//             Vec::new()
-//         }
-//     }
-
-//     fn used_values(&self) -> Vec<&dyn rusqlite::ToSql> {
-//         if let Some(value) = self {
-//             value.as_params()
-//         } else {
-//             Vec::new()
-//         }
-//     }
-// }
-
-// impl<T: AsParams> PartialRow for Vec<T> {
-//     fn used_column_names(&self, column_name: Option<String>) -> Vec<String> {
-//         if self.has_values() {
-//             vec![column_name.expect("Needs column name!")]
-//         } else {
-//             Vec::new()
-//         }
-//     }
-
-//     fn used_values(&self) -> Vec<&dyn rusqlite::ToSql> {
-//         if self.len() > 1 {
-//             eprintln!("Ahh, this is lossy!");
-//         }
-//         if let Some(value) = self.into_iter().next() {
-//             value.as_params()
-//         } else {
-//             Vec::new()
-//         }
-//     }
-// }
 
 pub fn insert_into_table<'a, T: ToTable<'a> + Clone>(
     connection: &&'a rusqlite::Connection,
@@ -878,11 +627,12 @@ pub fn insert_into_table<'a, T: ToTable<'a> + Clone>(
     }
 }
 
-pub fn load_where<'a, T: ToTable<'a>>(
+pub fn load_where<'a, T: ToTable<'a>, F: filter::Filter>(
     connection: &&'a rusqlite::Connection,
-    filter: impl filter::Filter,
+    filter: impl Into<F>,
 ) -> Result<Vec<T>, rusqlite::Error> {
     let mut sql = format!("SELECT * FROM {} WHERE ", T::NAME);
+    let filter = filter.into();
     filter.to_sql(&mut sql, None);
     let sql = sql.trim_end_matches(" WHERE ");
     debug_sql(sql);
@@ -898,11 +648,12 @@ pub fn load_where<'a, T: ToTable<'a>>(
         .collect()
 }
 
-pub fn update<'a, T: ToTable<'a>, V: AsParamsOptional + AsColumnsOptional>(
+pub fn update<'a, T: ToTable<'a>, V: AsParamsOptional + AsColumnsOptional, F: filter::Filter>(
     connection: &&'a rusqlite::Connection,
-    filter: impl filter::Filter,
+    filter: impl Into<F>,
     value: V,
 ) -> Result<usize, rusqlite::Error> {
+    let filter = filter.into();
     let columns = value
         .columns_skip_optional(None, false, false)
         .into_iter()

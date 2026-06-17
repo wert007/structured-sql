@@ -131,11 +131,11 @@ impl ToTable {
                 silo::insert_into_table(&self.connection, row)
             }
 
-            fn load_where(&self, filter: Self::FilterType) -> Result<Vec<Self::RowType>, silo::rusqlite::Error> {
+            fn load_where(&self, filter: impl Into<Self::FilterType>) -> Result<Vec<Self::RowType>, silo::rusqlite::Error> {
                 silo::load_where(&self.connection, filter)
             }
-            fn update(&self, filter: Self::FilterType, updated: #partial_name) -> Result<usize, silo::rusqlite::Error> {
-                silo::update::<#value_type_name, #partial_name>(&self.connection, filter, updated)
+            fn update(&self, filter: impl Into<Self::FilterType>, updated: #partial_name) -> Result<usize, silo::rusqlite::Error> {
+                silo::update::<#value_type_name, #partial_name, Self::FilterType>(&self.connection, filter, updated)
             }
 
             fn from_connection(connection: &'a silo::rusqlite::Connection) -> Self {

@@ -64,7 +64,7 @@ impl Member {
             variant: self.variant,
             name: self.name,
             visibility: self.visibility,
-            type_: syn::parse_quote!(<#t as silo::HasPartial>::Partial),
+            type_: syn::parse_quote!(<#t as silo::partial::HasPartial>::Partial),
             is_primary: self.is_primary,
             is_unique: self.is_unique,
             is_skipped: self.is_skipped,

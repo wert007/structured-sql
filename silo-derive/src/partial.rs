@@ -34,7 +34,9 @@ pub(crate) fn create_partial_for(
                 } else {
                     t
                 };
-                Box::leak(Box::new(parse_quote!(<#t as silo::HasPartial>::Partial)))
+                Box::leak(Box::new(
+                    parse_quote!(<#t as silo::partial::HasPartial>::Partial),
+                ))
             })
         });
 
@@ -47,7 +49,7 @@ pub(crate) fn create_partial_for(
 
         #partial_type
 
-        impl silo::HasPartial for #name {
+        impl silo::partial::HasPartial for #name {
             type Partial = #partial_name;
         }
 
@@ -169,9 +171,9 @@ fn create_partial_type_for(
     let partial_name = base_struct.partial_name();
     if let Some(variant_field) = base_struct.variant_field().map(|f| f.name) {
         quote! {
-            impl silo::PartialType<#name> for #partial_name {
+            impl silo::partial::PartialType<#name> for #partial_name {
                 fn transpose(self) -> Option<#name> {
-                    use silo::PartialType;
+                    use silo::partial::PartialType;
                     let #variant_field = self.#variant_field.transpose()?;
                     match #variant_field {
                         _ => None
@@ -183,9 +185,9 @@ fn create_partial_type_for(
         let field_names: Vec<_> = base_struct.fields().into_iter().map(|f| f.name).collect();
         let skipped_field_names = base_struct.skipped_fields().into_iter().map(|f| f.name);
         quote! {
-            impl silo::PartialType<#name> for #partial_name {
+            impl silo::partial::PartialType<#name> for #partial_name {
                 fn transpose(self) -> Option<#name> {
-                    use silo::PartialType;
+                    use silo::partial::PartialType;
                     #(let #field_names = self.#field_names.transpose()?;)*
                     Some(#name {
                         #(#field_names,)*

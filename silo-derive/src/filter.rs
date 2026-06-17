@@ -39,10 +39,35 @@ pub(crate) fn create_filter_for(
         .map(|f| f.name)
         .collect_vec();
     let field_types = base_struct.fields().into_iter().map(|f| f.type_);
+    let from_pk = if let Some(pk) = base_struct.primary_key_field() {
+        let pk_type = pk.type_;
+        let pk_ident = pk.name;
+        quote! {
+            impl From<#pk_type> for #filter_name {
+                fn from(#pk_ident: #pk_type) -> Self {
+                    use silo::filter::Filterable;
+                    Self {
+                        #pk_ident: #pk_ident.convert_to_equals_filter(),
+                        ..Default::default()
+                    }
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
     quote! {
         #[derive(Default)]
         #visibility struct #filter_name {
             #(pub #fields: <#field_types as silo::filter::Filterable>::Filter,)*
+        }
+
+        #from_pk
+
+        impl From<()> for #filter_name {
+            fn from((): ()) -> Self {
+                Self::default()
+            }
         }
 
         impl silo::filter::Filter for #filter_name {
@@ -67,6 +92,13 @@ pub(crate) fn create_filter_for(
 
         impl silo::filter::Filterable for #name {
             type Filter = #filter_name;
+            fn convert_to_equals_filter(self) -> Self::Filter {
+                Self::Filter {
+                    #(
+                        #fields: self.#fields.convert_to_equals_filter(),
+                    )*
+                }
+            }
         }
     }
 }

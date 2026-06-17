@@ -51,7 +51,7 @@ fn main() {
             // },
         })
         .unwrap();
-    dbg!(persons.load_where(Default::default()).unwrap());
+    dbg!(persons.load_where(()).unwrap());
     db.save("file.sqlite").unwrap();
 
     // let r = persons
