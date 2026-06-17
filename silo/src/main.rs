@@ -27,7 +27,7 @@ struct AddressTC {
 struct Person {
     name: String,
     age: u8,
-    #[silo(unique)]
+    #[silo(primary)]
     id: Uuid,
     // #[silo(foreign)]
     // residence: AddressTT,
