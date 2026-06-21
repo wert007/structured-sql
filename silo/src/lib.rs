@@ -14,6 +14,69 @@ pub mod partial;
 pub use error::Error;
 mod conversions;
 pub mod filter;
+pub mod projections;
+
+#[macro_export]
+macro_rules! type_checker {
+    (
+         $struct:ty,
+        $field:ident
+         $(.$more_fields:ident)*
+    ) => {
+        // The const block forces the const evaluation.
+        #[allow(unreachable_code, unused_variables, clippy::diverging_sub_expression)]
+        const _: () = {
+            // `if false { ... }` ensures that the unreacahble! macro invokation is indeed unreachable.
+            if false {
+                // Rust performs the type-checking at compile time even if the code is unreachable.
+                //
+                // The return type of core::unreachable!() is never type,
+                // which can be assigned to any type.
+                let unreachable_obj: $struct = core::unreachable!();
+                let _: _ = unreachable_obj.$field$(.$more_fields)*;
+            }
+        };
+    };
+}
+
+#[macro_export]
+/// **Usage example**
+///
+/// ```rust
+///     column_name_of!(Coordinate, x) // == Cow::Borrowed("x")
+///     column_name_of!(Rect, top_left.x) // == Cow::Borrowed("top_left_x")
+/// ```
+///
+/// **Description**
+///
+/// This helps you to get the column names, that will be created by silo. You
+/// can use this for projections for example.
+///
+/// **Compatibility Notes**
+///
+/// Currently this always returns a Cow::Borrowed. But how this macro will work,
+/// once you can rename fields, is not clear yet.
+macro_rules! column_name_of {
+    ($t:ty, $f:ident) => {
+        {
+            silo::type_checker!($t, $f);
+            std::borrow::Cow::Borrowed(stringify!($f))
+        }
+    };
+    ($t:ty, $f:ident $(.$fs:ident)+) => {
+        {
+            silo::type_checker!($t, $f$(.$fs)+);
+            let n = concat!(
+                stringify!($f),
+                $(
+                    "_",
+                    stringify!($fs)
+                )+
+            );
+            std::borrow::Cow::Borrowed(n)
+        }
+    }
+}
 
 pub static DEBUG_SQL: AtomicBool = AtomicBool::new(false);
 
@@ -58,6 +121,8 @@ use time::macros::format_description;
 use time::{Date, Time};
 use time::{OffsetDateTime, format_description::FormatItem};
 use uuid::{NonNilUuid, Uuid};
+
+use crate::projections::{Projectable, Projection, ProjectionColumns};
 
 pub struct Database {
     connection: rusqlite::Connection,
@@ -433,6 +498,28 @@ pub trait SqlTable<'a>: Sized {
         filter: impl Into<Self::FilterType>,
         updated: <Self::ValueType as partial::HasPartial>::Partial,
     ) -> Result<usize, rusqlite::Error>;
+    fn project<P: Projectable>(
+        &self,
+        columns: impl Into<ProjectionColumns>,
+        filter: impl Into<Self::FilterType>,
+    ) -> Result<Vec<P>, rusqlite::Error> {
+        projections::project::<Self::RowType, P, Self::FilterType>(
+            self.connection(),
+            Projection::new(columns.into()),
+            filter.into(),
+        )
+    }
+    fn project_distinct<P: Projectable>(
+        &self,
+        columns: impl Into<ProjectionColumns>,
+        filter: impl Into<Self::FilterType>,
+    ) -> Result<Vec<P>, rusqlite::Error> {
+        projections::project::<Self::RowType, P, Self::FilterType>(
+            self.connection(),
+            Projection::new(columns.into()).with_distinct(true),
+            filter.into(),
+        )
+    }
     // fn count(
     //     &self,
     //     filter: <Self::RowType as HasFilter>::Filter,

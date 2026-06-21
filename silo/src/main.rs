@@ -8,6 +8,7 @@
 //     street: String,
 // }
 
+use silo::column_name_of;
 use uuid::Uuid;
 
 #[derive(Default, Debug, Clone)]
@@ -51,7 +52,15 @@ fn main() {
             // },
         })
         .unwrap();
-    dbg!(persons.load_where(()).unwrap());
+    dbg!(
+        persons
+            .project::<(String, u8, u8)>(
+                [column_name_of!(Person, name), column_name_of!(Person, age)],
+                ()
+            )
+            .unwrap()
+    );
+    // dbg!(persons.load_where(()).unwrap());
     db.save("file.sqlite").unwrap();
 
     // let r = persons
