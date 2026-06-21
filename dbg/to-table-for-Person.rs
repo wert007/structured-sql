@@ -169,11 +169,22 @@ impl silo::PartialRow for PartialPerson {
         result
     }
 }
-impl silo::TableAsParams for Person {
+impl AsColumns for Person {
     const COLUMN_COUNT: usize = 0
         + <String as silo::AsParams>::COLUMN_COUNT
         + <u8 as silo::AsParams>::COLUMN_COUNT
         + <AddressTC as silo::AsParams>::COLUMN_COUNT;
+    fn columns(parent: Option<&str>) -> Vec<SqlColumn> {
+        let mut result = Vec::with_capacity(Self::COLUMN_COUNT);
+        vec![SqlColumn {
+            name: parent.unwrap().to_string().into(),
+            r#type: T::SQL_COLUMN_TYPE,
+            is_primary: false,
+            is_unique: false,
+        }]
+    }
+}
+impl silo::TableAsParams for Person {
     fn as_params<'a>(&'a self) -> Vec<&'a dyn silo::rusqlite::ToSql> {
         use silo::AsParams;
         let mut result = Vec::with_capacity(<Self as silo::TableAsParams>::COLUMN_COUNT);

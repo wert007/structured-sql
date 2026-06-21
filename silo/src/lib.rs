@@ -86,6 +86,7 @@ pub fn toggle_debug_sql() {
 }
 
 fn debug_sql(sql: &str) {
+    // column_name_of!(Database > connection.execute_batch);
     if !DEBUG_SQL.load(SeqCst) {
         return;
     };

@@ -197,11 +197,22 @@ impl silo::PartialRow for PartialAddressTT {
         result
     }
 }
-impl silo::TableAsParams for AddressTT {
+impl AsColumns for AddressTT {
     const COLUMN_COUNT: usize = 0
         + <u64 as silo::AsParams>::COLUMN_COUNT
         + <String as silo::AsParams>::COLUMN_COUNT
         + <String as silo::AsParams>::COLUMN_COUNT;
+    fn columns(parent: Option<&str>) -> Vec<SqlColumn> {
+        let mut result = Vec::with_capacity(Self::COLUMN_COUNT);
+        vec![SqlColumn {
+            name: parent.unwrap().to_string().into(),
+            r#type: T::SQL_COLUMN_TYPE,
+            is_primary: false,
+            is_unique: false,
+        }]
+    }
+}
+impl silo::TableAsParams for AddressTT {
     fn as_params<'a>(&'a self) -> Vec<&'a dyn silo::rusqlite::ToSql> {
         use silo::AsParams;
         let mut result = Vec::with_capacity(<Self as silo::TableAsParams>::COLUMN_COUNT);
