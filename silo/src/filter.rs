@@ -3,6 +3,34 @@ use chrono::{DateTime, Utc};
 use std::fmt::Write;
 use uuid::{NonNilUuid, Uuid};
 
+#[derive(Default)]
+pub enum OptionalFilter<T: Filter> {
+    #[default]
+    IsNone,
+    IsSome,
+    IsSomeAnd(T),
+}
+
+impl<T: Filter> AsParams for OptionalFilter<T> {
+    fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>> {
+        match self {
+            OptionalFilter::IsNone => Vec::new(),
+            OptionalFilter::IsSome => Vec::new(),
+            OptionalFilter::IsSomeAnd(it) => it.as_params(),
+        }
+    }
+}
+
+impl<T: Filter> Filter for OptionalFilter<T> {
+    fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
+        match self {
+            OptionalFilter::IsNone => todo!(),
+            OptionalFilter::IsSome => todo!(),
+            OptionalFilter::IsSomeAnd(it) => it.to_sql(sql, parent),
+        }
+    }
+}
+
 pub enum FieldFilter<T: IsFieldFilter> {
     None,
     Not(Box<FieldFilter<T>>),
@@ -93,6 +121,17 @@ pub trait Filterable {
     type Filter: Filter;
 
     fn convert_to_equals_filter(self) -> Self::Filter;
+}
+
+impl<T: Filterable> Filterable for Option<T> {
+    type Filter = OptionalFilter<T::Filter>;
+
+    fn convert_to_equals_filter(self) -> Self::Filter {
+        match self {
+            Some(it) => OptionalFilter::IsSomeAnd(it.convert_to_equals_filter()),
+            None => OptionalFilter::IsNone,
+        }
+    }
 }
 
 macro_rules! impl_filterable {
