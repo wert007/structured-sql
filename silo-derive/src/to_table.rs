@@ -1,15 +1,15 @@
 use quote::{ToTokens, quote};
 use syn::{Ident, Visibility};
 
-mod as_params;
-mod attributes;
-mod base_struct;
+use crate::{attributes, base_struct};
+
+pub mod as_params;
 mod enum_helper;
-mod filter;
-mod from_row;
+pub mod filter;
+pub mod from_row;
 mod from_row_type;
 mod into_sql_table;
-mod partial;
+pub mod partial;
 mod row_type;
 mod to_columns;
 
@@ -35,7 +35,7 @@ impl ToTable {
         visibility: Visibility,
         data_struct: syn::DataStruct,
     ) -> Result<Self, crate::error::Error> {
-        let attribute_struct_data = attributes::AttributeStructData::parse(&attrs);
+        let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs);
         let on_conflict = attribute_struct_data.on_conflict();
 
         let base_struct: base_struct::StructData = base_struct::StructData::from_struct_data(
@@ -57,7 +57,7 @@ impl ToTable {
         visibility: Visibility,
         data_enum: syn::DataEnum,
     ) -> Result<ToTable, crate::error::Error> {
-        let attribute_struct_data = attributes::AttributeStructData::parse(&attrs);
+        let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs);
         let on_conflict = attribute_struct_data.on_conflict();
         let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
         let base_struct: base_struct::StructData = base_struct::StructData::from_enum_data(

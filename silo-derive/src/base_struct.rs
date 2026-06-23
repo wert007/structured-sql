@@ -1,4 +1,4 @@
-use super::attributes::AttributeFieldData;
+use crate::attributes::AttributeFieldData;
 use crate::error::Error;
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, format_ident, quote};

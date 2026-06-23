@@ -6,6 +6,7 @@ use uuid::{NonNilUuid, Uuid};
 #[derive(Default)]
 pub enum OptionalFilter<T: Filter> {
     #[default]
+    IsEither,
     IsNone,
     IsSome,
     IsSomeAnd(T),
@@ -14,8 +15,9 @@ pub enum OptionalFilter<T: Filter> {
 impl<T: Filter> AsParams for OptionalFilter<T> {
     fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>> {
         match self {
-            OptionalFilter::IsNone => Vec::new(),
-            OptionalFilter::IsSome => Vec::new(),
+            OptionalFilter::IsEither | OptionalFilter::IsNone | OptionalFilter::IsSome => {
+                Vec::new()
+            }
             OptionalFilter::IsSomeAnd(it) => it.as_params(),
         }
     }
@@ -24,6 +26,7 @@ impl<T: Filter> AsParams for OptionalFilter<T> {
 impl<T: Filter> Filter for OptionalFilter<T> {
     fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
         match self {
+            OptionalFilter::IsEither => {}
             OptionalFilter::IsNone => todo!(),
             OptionalFilter::IsSome => todo!(),
             OptionalFilter::IsSomeAnd(it) => it.to_sql(sql, parent),

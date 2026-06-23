@@ -26,7 +26,7 @@ impl StructuredAttribute {
 }
 
 #[derive(Debug, Default)]
-pub struct AttributeStructData {
+pub struct ToTableAttributesStruct {
     pub on_conflict_rollback: bool,
     pub on_conflict_abort: bool,
     pub on_conflict_fail: bool,
@@ -35,8 +35,8 @@ pub struct AttributeStructData {
     pub has_custom_migration_handler: bool,
 }
 
-impl AttributeStructData {
-    pub fn parse(attrs: &[Attribute]) -> AttributeStructData {
+impl ToTableAttributesStruct {
+    pub fn parse(attrs: &[Attribute]) -> ToTableAttributesStruct {
         let mut this = Self::default();
         for attribute in attrs {
             let Some(attribute) = StructuredAttribute::new(attribute) else {

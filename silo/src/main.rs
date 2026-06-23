@@ -11,7 +11,7 @@
 use silo::column_name_of;
 use uuid::Uuid;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, silo::derive::ToColumns)]
 struct AddressTC {
     city: String,
     street: String,
@@ -33,7 +33,7 @@ struct Person {
     id: Uuid,
     // #[silo(foreign)]
     // residence: AddressTT,
-    // residence: AddressTC,
+    residence: AddressTC,
     // role: MovieRole,
 }
 
@@ -48,16 +48,20 @@ fn main() {
             age: 58,
             traditional_name: None,
             id: Uuid::max(),
-            // residence: AddressTC {
-            //     city: "Toronot".into(),
-            //     street: "Bakerstreet 221b".into(),
-            // },
+            residence: AddressTC {
+                city: "Toronot".into(),
+                street: "Bakerstreet 221b".into(),
+            },
         })
         .unwrap();
     dbg!(
         persons
-            .project::<(String, u8, u8)>(
-                [column_name_of!(Person, name), column_name_of!(Person, age)],
+            .project::<(String, u8, String)>(
+                [
+                    column_name_of!(Person, name),
+                    column_name_of!(Person, age),
+                    column_name_of!(Person, residence.street),
+                ],
                 ()
             )
             .unwrap()

@@ -115,12 +115,12 @@ impl ToSqlDyn<'static> {
 }
 
 pub mod derive {
+    pub use silo_derive::ToColumns;
     pub use silo_derive::ToTable;
 }
 
-use time::macros::format_description;
+use time::OffsetDateTime;
 use time::{Date, Time};
-use time::{OffsetDateTime, format_description::FormatItem};
 use uuid::{NonNilUuid, Uuid};
 
 use crate::projections::{Projectable, Projection, ProjectionColumns};
@@ -655,6 +655,7 @@ impl SqlColumnType {
         }
     }
 
+    #[allow(dead_code)]
     const fn to_optional(this: SqlColumnType) -> SqlColumnType {
         match this {
             SqlColumnType::OptionalFloat | SqlColumnType::Float => Self::OptionalFloat,
