@@ -1,14 +1,8 @@
-use std::collections::HashMap;
-
-use crate::{
-    attributes::{self, AttributeFieldData},
-    error::{self, Error, ErrorKind},
-    type_checker::{StripOption, ToName},
-};
-use heck::ToSnakeCase;
+use super::attributes::AttributeFieldData;
+use crate::error::Error;
 use proc_macro2::{Span, TokenStream};
-use quote::{ToTokens, TokenStreamExt, format_ident, quote, quote_spanned};
-use syn::{Ident, LitInt, Type, Visibility, parse_quote, spanned::Spanned};
+use quote::{ToTokens, format_ident, quote};
+use syn::{Ident, Type, Visibility, spanned::Spanned};
 
 #[derive(Clone, Copy)]
 pub struct Field<'a> {
@@ -125,7 +119,7 @@ impl Member {
         ColumnData {
             span: self.name.span(),
             name: self.name.to_string(),
-            type_: &self.type_.strip_option(),
+            type_: &self.type_,
             is_unique: self.is_unique,
             is_primary: self.is_primary,
         }
@@ -143,97 +137,6 @@ pub struct ColumnData<'a> {
 impl ColumnData<'_> {
     pub(crate) fn ident(&self) -> syn::Ident {
         syn::Ident::new(&self.name, self.span)
-    }
-}
-
-impl ToTokens for ColumnData<'_> {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let type_ = self.type_;
-        let name = syn::LitStr::new(&self.name, self.span);
-        let is_primary = syn::LitBool::new(self.is_primary, self.span);
-        let is_unique = syn::LitBool::new(self.is_unique, self.span);
-        let iter = if let Some(column_type) = has_column_type(type_) {
-            quote_spanned! {self.span=>
-                [silo::SqlColumn {
-                    name: #name.into(), is_primary: #is_primary, is_unique: #is_unique,
-                    r#type: #column_type,
-                }]
-            }
-        } else {
-            let type_name = type_.to_name().unwrap_or_else(|| {
-                panic!(
-                    "Check beforehand for {}",
-                    type_.to_token_stream().to_string()
-                )
-            });
-            let mut macro_name = format_ident!("create_columns_with_prefix_for_{type_name}");
-            macro_name.set_span(self.span);
-            quote_spanned! {self.span=>
-                <#type_ as silo::ToColumns>::columns().into_iter().map(|mut c| {
-                    c.name = format!("{}_{}",#name, &c.name).into();
-                    c
-                })
-            }
-        };
-        tokens.extend(iter);
-    }
-}
-
-fn is_simple_type(type_: &Type) -> bool {
-    has_column_type(type_).is_some()
-}
-
-fn has_column_type(type_: &Type) -> Option<TokenStream> {
-    let supported_simple_types: HashMap<&'static str, TokenStream> = [
-        ("r#bool", quote! { silo::SqlColumnType::Integer }),
-        ("r#i8", quote! { silo::SqlColumnType::Integer }),
-        ("r#i16", quote! { silo::SqlColumnType::Integer }),
-        ("r#i32", quote! { silo::SqlColumnType::Integer }),
-        ("r#i64", quote! { silo::SqlColumnType::Integer }),
-        ("r#i128", quote! { silo::SqlColumnType::Integer }),
-        ("r#u8", quote! { silo::SqlColumnType::Integer }),
-        ("r#u16", quote! { silo::SqlColumnType::Integer }),
-        ("r#u32", quote! { silo::SqlColumnType::Integer }),
-        ("r#u64", quote! { silo::SqlColumnType::Integer }),
-        ("r#u128", quote! { silo::SqlColumnType::Integer }),
-        ("r#f32", quote! { silo::SqlColumnType::Float }),
-        ("r#f64", quote! { silo::SqlColumnType::Float }),
-        ("bool", quote! { silo::SqlColumnType::Integer }),
-        ("i8", quote! { silo::SqlColumnType::Integer }),
-        ("i16", quote! { silo::SqlColumnType::Integer }),
-        ("i32", quote! { silo::SqlColumnType::Integer }),
-        ("i64", quote! { silo::SqlColumnType::Integer }),
-        ("i128", quote! { silo::SqlColumnType::Integer }),
-        ("u8", quote! { silo::SqlColumnType::Integer }),
-        ("u16", quote! { silo::SqlColumnType::Integer }),
-        ("u32", quote! { silo::SqlColumnType::Integer }),
-        ("u64", quote! { silo::SqlColumnType::Integer }),
-        ("u128", quote! { silo::SqlColumnType::Integer }),
-        ("f32", quote! { silo::SqlColumnType::Float }),
-        ("f64", quote! { silo::SqlColumnType::Float }),
-        ("String", quote! { silo::SqlColumnType::Text }),
-    ]
-    .into_iter()
-    .collect();
-    match type_ {
-        Type::Group(type_group) => has_column_type(&type_group.elem),
-        Type::Paren(type_paren) => has_column_type(&type_paren.elem),
-        Type::Path(type_path) => {
-            let Some(name) = type_path.path.segments.iter().last() else {
-                return None;
-            };
-            name.arguments
-                .is_empty()
-                .then(|| {
-                    supported_simple_types
-                        .get(&name.ident.to_string().as_str())
-                        .cloned()
-                })
-                .flatten()
-        }
-        // Type::Ptr(type_ptr) => todo!(),
-        // Type::Reference(type_reference) => todo!(),
-        _ => None,
     }
 }
 

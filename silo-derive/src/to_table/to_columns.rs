@@ -1,8 +1,8 @@
 use quote::quote;
 
 pub(crate) fn create_to_columns_for_pk(
-    base_struct: &crate::base_struct::StructData,
-    pk: crate::base_struct::Field<'_>,
+    base_struct: &super::base_struct::StructData,
+    pk: super::base_struct::Field<'_>,
     tokens: &mut proc_macro2::TokenStream,
 ) {
     let name = &base_struct.name;

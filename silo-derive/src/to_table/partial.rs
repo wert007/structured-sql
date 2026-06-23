@@ -2,11 +2,8 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::parse_quote;
 
-use crate::type_checker::StripOption;
-
 pub(crate) fn create_partial_for(
-    base_struct: &crate::base_struct::StructData,
-    strip_option_type_from_fields: bool,
+    base_struct: &super::base_struct::StructData,
     tokens: &mut proc_macro2::TokenStream,
 ) {
     let visibility = &base_struct.visibility;
@@ -29,11 +26,6 @@ pub(crate) fn create_partial_for(
         .chain(base_struct.variant_field())
         .map(|f| {
             f.map_type(|t| {
-                let t = if strip_option_type_from_fields {
-                    t.strip_option()
-                } else {
-                    t
-                };
                 Box::leak(Box::new(
                     parse_quote!(<#t as silo::partial::HasPartial>::Partial),
                 ))
@@ -105,7 +97,7 @@ pub(crate) fn create_partial_for(
     });
 }
 
-fn create_into_for(base_struct: &crate::base_struct::StructData) -> TokenStream {
+fn create_into_for(base_struct: &super::base_struct::StructData) -> TokenStream {
     let name = &base_struct.name;
     let partial_name = base_struct.partial_name();
     let field_names: Vec<_> = base_struct.fields().into_iter().map(|f| f.name).collect();
@@ -165,7 +157,7 @@ fn create_into_for(base_struct: &crate::base_struct::StructData) -> TokenStream 
 }
 
 fn create_partial_type_for(
-    base_struct: &crate::base_struct::StructData,
+    base_struct: &super::base_struct::StructData,
 ) -> proc_macro2::TokenStream {
     let name = &base_struct.name;
     let partial_name = base_struct.partial_name();

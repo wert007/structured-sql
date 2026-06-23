@@ -1,7 +1,7 @@
 use quote::quote;
 
 pub(crate) fn create_from_row_for(
-    base_struct: &crate::base_struct::StructData,
+    base_struct: &super::base_struct::StructData,
     tokens: &mut proc_macro2::TokenStream,
 ) {
     create_from_row_for_base_struct(base_struct, tokens);
@@ -9,7 +9,7 @@ pub(crate) fn create_from_row_for(
 }
 
 pub(crate) fn create_from_row_for_base_struct(
-    base_struct: &crate::base_struct::StructData,
+    base_struct: &super::base_struct::StructData,
     tokens: &mut proc_macro2::TokenStream,
 ) {
     let name = &base_struct.name;
@@ -36,7 +36,7 @@ pub(crate) fn create_from_row_for_base_struct(
 }
 
 fn create_try_from_row_body(
-    base_struct: &crate::base_struct::StructData,
+    base_struct: &super::base_struct::StructData,
 ) -> proc_macro2::TokenStream {
     let columns = base_struct.columns();
     let column_names: Vec<syn::Ident> = columns.iter().map(|c| c.ident()).collect();
