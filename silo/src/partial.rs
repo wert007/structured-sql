@@ -13,3 +13,7 @@ pub trait HasPartial<T = Self>: Sized + Into<Self::Partial> {
     type Partial: Default;
     // type Partial: PartialType<T>;
 }
+
+impl<T: HasPartial> HasPartial for Option<T> {
+    type Partial = Option<Option<T>>;
+}

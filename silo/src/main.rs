@@ -28,6 +28,7 @@ struct AddressTC {
 struct Person {
     name: String,
     age: u8,
+    traditional_name: Option<String>,
     #[silo(primary)]
     id: Uuid,
     // #[silo(foreign)]
@@ -45,6 +46,7 @@ fn main() {
         .insert(Person {
             name: "Johnny English".into(),
             age: 58,
+            traditional_name: None,
             id: Uuid::max(),
             // residence: AddressTC {
             //     city: "Toronot".into(),
