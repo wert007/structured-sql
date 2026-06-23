@@ -27,7 +27,7 @@ pub(crate) fn create_from_row_for_base_struct(
             fn try_from_row(
                 row: &silo::rusqlite::Row,
                 connection: &silo::rusqlite::Connection,
-            ) -> Result<Self, silo::Error> {
+            ) -> std::result::Result<Self, silo::Error> {
                 #from_row_body
             }
         }
