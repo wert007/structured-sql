@@ -127,14 +127,14 @@ impl ToTable {
                 self.connection
             }
 
-            fn insert(&self, row: Self::RowType) -> Result<bool, silo::rusqlite::Error> {
+            fn insert(&self, row: Self::RowType) -> std::result::Result<bool, silo::rusqlite::Error> {
                 silo::insert_into_table(&self.connection, row)
             }
 
-            fn load_where(&self, filter: impl Into<Self::FilterType>) -> Result<Vec<Self::RowType>, silo::rusqlite::Error> {
+            fn load_where(&self, filter: impl Into<Self::FilterType>) -> std::result::Result<Vec<Self::RowType>, silo::rusqlite::Error> {
                 silo::load_where(&self.connection, filter)
             }
-            fn update(&self, filter: impl Into<Self::FilterType>, updated: #partial_name) -> Result<usize, silo::rusqlite::Error> {
+            fn update(&self, filter: impl Into<Self::FilterType>, updated: #partial_name) -> std::result::Result<usize, silo::rusqlite::Error> {
                 silo::update::<#value_type_name, #partial_name, Self::FilterType>(&self.connection, filter, updated)
             }
 
