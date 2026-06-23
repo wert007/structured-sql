@@ -1,7 +1,7 @@
 use quote::quote;
 
 pub(crate) fn create_enum_helper_for(
-    base_struct: &crate::base_struct::StructData,
+    base_struct: &super::base_struct::StructData,
     tokens: &mut proc_macro2::TokenStream,
 ) {
     let name = &base_struct.name;

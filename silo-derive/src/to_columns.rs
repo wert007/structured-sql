@@ -1,24 +1,44 @@
-use quote::quote;
+use crate::{attributes, base_struct};
+use quote::ToTokens;
+use syn::{Ident, Visibility};
 
-pub(crate) fn create_to_columns_for_pk(
-    base_struct: &crate::base_struct::StructData,
-    pk: crate::base_struct::Field<'_>,
-    tokens: &mut proc_macro2::TokenStream,
-) {
-    let name = &base_struct.name;
-    let pk = pk.name;
-    tokens.extend(quote! {
-        impl silo::ToColumns for #name {
-            fn fill_columns(columns: &mut Vec<silo::SqlColumn>) {
-            columns.push(silo::SqlColumn {
-                name: stringify!(#pk).into(),
-                // TODO: Support all possible pk types.
-                r#type: silo::SqlColumnType::Integer,
-                is_primary: false,
-                // Depends on how many to how many relation ship!
-                is_unique: false,
-            });
-        }
-        }
-    });
+mod as_params;
+mod extract_from_row;
+mod filterable;
+mod partial;
+
+pub struct ToColumns {
+    visibility: Visibility,
+    base_struct: base_struct::StructData,
+}
+
+impl ToColumns {
+    pub fn from_struct(
+        attrs: Vec<syn::Attribute>,
+        name: Ident,
+        visibility: Visibility,
+        data_struct: syn::DataStruct,
+    ) -> Result<Self, crate::error::Error> {
+        // let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs);
+        // let on_conflict = attribute_struct_data.on_conflict();
+
+        let base_struct: base_struct::StructData = base_struct::StructData::from_struct_data(
+            visibility.clone(),
+            name.clone(),
+            data_struct.fields,
+        )?;
+        Ok(Self {
+            visibility,
+            base_struct,
+        })
+    }
+}
+
+impl ToTokens for ToColumns {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        partial::impl_to_partial(tokens, &self.base_struct);
+        filterable::impl_filterable(tokens, &self.base_struct);
+        extract_from_row::impl_extract_from_row(tokens, &self.base_struct);
+        as_params::impl_as_params(tokens, &self.base_struct);
+    }
 }
