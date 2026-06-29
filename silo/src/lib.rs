@@ -365,7 +365,35 @@ impl_as_params!(u8, SqlColumnType::Integer);
 impl_as_params!(u16, SqlColumnType::Integer);
 impl_as_params!(u32, SqlColumnType::Integer);
 impl_as_params!(usize, SqlColumnType::Integer);
-impl_as_params!(u64, SqlColumnType::Integer);
+impl_as_params_base!(u64, SqlColumnType::Integer);
+
+impl<'a> AsParams for u64 {
+    fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>> {
+        if *self > i64::MAX as u64 {
+            vec![ToSqlDyn::Boxed(Box::new(i64::from_ne_bytes(
+                self.to_ne_bytes(),
+            )))]
+        } else {
+            vec![ToSqlDyn::Borrowed(self)]
+        }
+    }
+}
+
+impl<'a> ExtractFromRow for u64 {
+    fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
+        match row.get::<&str, i64>(column_name) {
+            Ok(it) => Ok(u64::from_ne_bytes(it.to_ne_bytes())),
+            Err(rusqlite::Error::InvalidColumnName(_)) => {
+                Err(Error::MissingColumn(column_name.to_string().into()))
+            }
+            Err(rusqlite::Error::InvalidColumnType(.., t)) => {
+                Err(Error::WrongColumnType(stringify!(u64).into(), t))
+            }
+            Err(err) => unreachable!("Impossible error? {err}"),
+        }
+    }
+}
+
 impl_as_params!(Time, SqlColumnType::Text);
 impl_as_params!(Date, SqlColumnType::Text);
 impl_as_params!(DateTime<Utc>, SqlColumnType::Text);
