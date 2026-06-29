@@ -16,6 +16,9 @@ mod conversions;
 pub mod filter;
 pub mod projections;
 
+#[cfg(test)]
+mod tests;
+
 #[macro_export]
 macro_rules! type_checker {
     (
@@ -70,7 +73,7 @@ macro_rules! column_name_of {
                 stringify!($f),
                 $(
                     "_",
-                    stringify!($fs)
+                    stringify!($fs),
                 )+
             );
             std::borrow::Cow::Borrowed(n)
@@ -83,6 +86,10 @@ pub static DEBUG_SQL: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "enable_debug_sql")]
 pub fn toggle_debug_sql() {
     DEBUG_SQL.update(SeqCst, SeqCst, |b| !b);
+}
+#[cfg(not(feature = "enable_debug_sql"))]
+pub fn toggle_debug_sql() {
+    panic!("This is only enabled with the enable_debug_sql feature");
 }
 
 fn debug_sql(sql: &str) {
@@ -176,9 +183,10 @@ impl Database {
         if self.connection.table_exists(None, T::NAME)? {
             return Ok(());
         }
-        let mut sql = "CREATE TABLE IF NOT EXISTS ".to_string();
+        let mut sql = "CREATE TABLE IF NOT EXISTS \"".to_string();
+
         sql.push_str(T::NAME);
-        sql.push_str(" (");
+        sql.push_str("\" (");
         for (i, column) in T::columns(None, false, false).into_iter().enumerate() {
             if i > 0 {
                 sql.push_str(",");
@@ -697,7 +705,7 @@ pub fn insert_into_table<'a, T: ToTable<'a> + Clone>(
             }
         });
 
-    let sql = format!("INSERT INTO {} ({columns}) VALUES ({values})", T::NAME,);
+    let sql = format!("INSERT INTO \"{}\" ({columns}) VALUES ({values})", T::NAME,);
     debug_sql(&sql);
 
     let mut stmt = connection.prepare(&sql)?;
@@ -720,7 +728,7 @@ pub fn load_where<'a, T: ToTable<'a>, F: filter::Filter>(
     connection: &&'a rusqlite::Connection,
     filter: impl Into<F>,
 ) -> Result<Vec<T>, rusqlite::Error> {
-    let mut sql = format!("SELECT * FROM {} WHERE ", T::NAME);
+    let mut sql = format!("SELECT * FROM \"{}\" WHERE ", T::NAME);
     let filter = filter.into();
     filter.to_sql(&mut sql, None);
     let sql = sql.trim_end_matches(" WHERE ");
@@ -757,7 +765,7 @@ pub fn update<'a, T: ToTable<'a>, V: AsParamsOptional + AsColumnsOptional, F: fi
                 acc
             }
         });
-    let mut sql = format!("UPDATE {} SET {columns}", T::NAME);
+    let mut sql = format!("UPDATE \"{}\" SET {columns}", T::NAME);
     sql.push_str(" WHERE ");
     filter.to_sql(&mut sql, None);
     let sql = sql.trim_end_matches(" WHERE ");

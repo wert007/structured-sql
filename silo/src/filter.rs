@@ -169,7 +169,19 @@ impl_filterable!(Uuid, String);
 impl_filterable!(String);
 impl_filterable!(bool);
 impl_filterable!(u8);
+impl_filterable!(u16);
+impl_filterable!(u32);
 impl_filterable!(u64);
+impl_filterable!(usize);
+impl_filterable!(i8);
+impl_filterable!(i16);
+impl_filterable!(i32);
+impl_filterable!(i64);
+impl_filterable!(isize);
+// We might wanna use a manual implementation later, to be closer to sqlite? To
+// be able to work around floating point shenanigans.
+impl_filterable!(f32);
+impl_filterable!(f64);
 
 macro_rules! impl_write_to_sql_as_to_string {
     ($t:ty) => {
@@ -182,7 +194,17 @@ macro_rules! impl_write_to_sql_as_to_string {
 }
 
 impl_write_to_sql_as_to_string!(u8);
+impl_write_to_sql_as_to_string!(u16);
+impl_write_to_sql_as_to_string!(u32);
 impl_write_to_sql_as_to_string!(u64);
+impl_write_to_sql_as_to_string!(usize);
+impl_write_to_sql_as_to_string!(i8);
+impl_write_to_sql_as_to_string!(i16);
+impl_write_to_sql_as_to_string!(i32);
+impl_write_to_sql_as_to_string!(i64);
+impl_write_to_sql_as_to_string!(isize);
+impl_write_to_sql_as_to_string!(f32);
+impl_write_to_sql_as_to_string!(f64);
 
 impl WriteToSql for bool {
     fn write_to_sql(&self, sql: &mut String, _operator: ComparisonOperator) {

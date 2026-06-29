@@ -17,13 +17,6 @@ struct AddressTC {
     street: String,
 }
 
-// #[derive(Debug, silo::derive::ToColumns)]
-// enum MovieRole {
-//     FilmStar,
-//     Director,
-//     Watcher,
-// }
-
 #[derive(Default, Debug, Clone, silo::derive::ToTable)]
 struct Person {
     name: String,
@@ -31,14 +24,13 @@ struct Person {
     traditional_name: Option<String>,
     #[silo(primary)]
     id: Uuid,
-    // #[silo(foreign)]
-    // residence: AddressTT,
     residence: AddressTC,
-    // role: MovieRole,
 }
 
 fn main() {
     use silo::{Database, SqlTable};
+
+    silo::toggle_debug_sql();
 
     let db = Database::create_in_memory().unwrap();
     let persons = db.load::<Person>().unwrap();
