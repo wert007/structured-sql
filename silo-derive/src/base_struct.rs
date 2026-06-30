@@ -136,7 +136,7 @@ pub struct ColumnData<'a> {
 }
 impl ColumnData<'_> {
     pub(crate) fn ident(&self) -> syn::Ident {
-        syn::Ident::new(&self.name, self.span)
+        format_ident!("{}", &self.name, span = self.span)
     }
 }
 

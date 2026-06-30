@@ -203,6 +203,7 @@ impl Database {
                 sql.push_str(" PRIMARY KEY");
             }
         }
+        // TODO: Add strict mode here: https://sqlite.org/stricttables.html
         sql.push_str(");");
         debug_sql(&sql);
 

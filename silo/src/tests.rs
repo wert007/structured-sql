@@ -197,21 +197,37 @@ fn duplicate_names() {
     assert_eq!(columns, ["a_city", "b_city"]);
 }
 
-// #[test]
-// fn test_rust_keywords_to_table() {
-//     #[derive(Debug, Clone, ToTable)]
-//     struct Foo {
-//         r#type: String,
-//     }
-// }
+#[test]
+fn test_rust_keywords_to_table() {
+    #[derive(Debug, Clone, ToTable)]
+    struct Foo {
+        r#type: String,
+    }
+    assert_eq!(column_name_of!(Foo, r#type), "type");
+    let columns: Vec<_> = Foo::columns(None, false, false)
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+    assert_eq!(columns, ["type"]);
+}
 
-// #[test]
-// fn test_rust_keywords_to_columns() {
-//     #[derive(Debug, Clone, ToColumns)]
-//     struct Foo {
-//         r#type: String,
-//     }
-// }
+#[test]
+fn test_rust_keywords_as_table_name_to_table() {
+    #[derive(Debug, Clone, ToTable)]
+    struct r#for {
+        r#type: String,
+    }
+    use silo::ToTable;
+    assert_eq!(r#for::NAME, "for");
+}
+
+#[test]
+fn test_rust_keywords_to_columns() {
+    #[derive(Debug, Clone, ToColumns)]
+    struct Foo {
+        r#type: String,
+    }
+}
 
 #[test]
 fn test_sqlite_keywords_to_table() {
@@ -253,7 +269,7 @@ fn test_sqlite_keywords_as_table_names_to_table() {
 fn test_sqlite_keywords_to_columns() {
     #[derive(Debug, Clone, ToColumns)]
     struct Foo {
-        value: String,
+        values: String,
     }
 }
 

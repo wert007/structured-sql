@@ -117,22 +117,10 @@ impl ToTable {
         }
     }
 
-    // fn create_filter(&self, tokens: &mut proc_macro2::TokenStream) {
-    //     tokens.extend(filter::create_filter_for(&self.base_struct));
-    // }
-
     fn create_conversions(&self, tokens: &mut proc_macro2::TokenStream) {
-        // if self.base_struct.variant_field().is_some() {
-        //     enum_helper::create_enum_helper_for(&self.base_struct, tokens);
-        // }
         from_row::create_from_row_for(&self.base_struct, tokens);
         partial::create_partial_for(&self.base_struct, tokens);
-        // TODO: ToColumns would use false here!
         as_params::create_as_params(&self.base_struct, tokens, true);
-        // as_params::create_as_params_for_pk(&self.base_struct, tokens);
-        // if let Some(pk) = self.base_struct.primary_key_field() {
-        //     to_columns::create_to_columns_for_pk(&self.base_struct, pk, tokens)
-        // }
     }
 
     fn create_into_sql_table(&self) -> proc_macro2::TokenStream {

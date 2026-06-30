@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use quote::quote;
+use quote::{format_ident, quote};
 
 pub(crate) fn create_as_params(
     base_struct: &super::base_struct::StructData,
@@ -17,7 +17,7 @@ pub(crate) fn create_as_params(
     let column_types = columns.iter().map(|c| &c.type_).collect_vec();
     let names = columns
         .iter()
-        .map(|c| syn::Ident::new(&c.name, c.span))
+        .map(|c| format_ident!("{}", &c.name, span = c.span))
         .collect_vec();
     let as_params = quote! {
             impl silo::AsColumns for #name {
