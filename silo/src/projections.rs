@@ -142,7 +142,7 @@ impl<P: Projectable> Projection<P> {
             if i != 0 {
                 buf.push_str(", ");
             }
-            buf.push_str(&column);
+            buf.push_str(column);
         }
         buf
     }
@@ -151,7 +151,7 @@ impl<P: Projectable> Projection<P> {
         Self {
             columns,
             unique_only: false,
-            output: PhantomData::default(),
+            output: PhantomData,
         }
     }
 

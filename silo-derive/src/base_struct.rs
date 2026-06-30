@@ -245,7 +245,7 @@ impl StructData {
             is_partial: false,
             is_row_type: false,
         };
-        if fields.iter().filter(|f| !f.0.is_skip).next().is_none() {
+        if fields.iter().find(|f| !f.0.is_skip).is_none() {
             return Err(Error::new(name_span, crate::error::ErrorKind::NoColumns));
         }
         if let Some(multiple_primaries) = fields.iter().filter(|f| f.0.is_primary).nth(1) {

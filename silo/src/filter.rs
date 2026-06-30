@@ -1,6 +1,6 @@
 use crate::{AsParams, ToSqlDyn, conversions::ToSqlValueString};
 use chrono::{DateTime, Utc};
-use std::{borrow::Borrow, fmt::Write, ops::Deref};
+use std::fmt::Write;
 use uuid::{NonNilUuid, Uuid};
 
 #[derive(Default)]
@@ -34,7 +34,9 @@ impl<T: Filter> Filter for OptionalFilter<T> {
     }
 }
 
+#[derive(Default)]
 pub enum FieldFilter<T: IsFieldFilter> {
+    #[default]
     None,
     Not(Box<FieldFilter<T>>),
     Comparison(T, ComparisonOperator),
@@ -86,11 +88,6 @@ impl<T: IsFieldFilter> AsParams for FieldFilter<T> {
     }
 }
 
-impl<T: IsFieldFilter> Default for FieldFilter<T> {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 pub trait Filter: AsParams {
     fn to_sql(&self, sql: &mut String, parent: Option<&str>);

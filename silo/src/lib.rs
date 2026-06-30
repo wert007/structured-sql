@@ -182,6 +182,15 @@ impl Database {
         Self { connection }
     }
 
+    /// Calls rusqlite::Connection::from_handle.
+    ///
+    /// Create a Connection from a raw handle.
+    ///
+    /// The underlying SQLite database connection handle will not be closed when
+    /// the returned connection is dropped/closed.
+    ///
+    /// # Safety
+    /// This function is unsafe because improper use may impact the Connection.
     pub unsafe fn from_connection(
         connection: &rusqlite::Connection,
     ) -> Result<Self, rusqlite::Error> {
@@ -221,12 +230,12 @@ impl Database {
         sql.push_str("\" (");
         for (i, column) in T::columns(None, false, false).into_iter().enumerate() {
             if i > 0 {
-                sql.push_str(",");
+                sql.push(',');
             }
             sql.push('"');
             sql.push_str(&column.name);
             sql.push('"');
-            sql.push_str(" ");
+            sql.push(' ');
             sql.push_str(column.r#type.as_sql());
             if column.is_unique {
                 sql.push_str(" UNIQUE");
@@ -311,7 +320,6 @@ impl<T: AsParams + AsColumns> AsParams for Option<T> {
         match self {
             Some(it) => it.as_params(),
             None => (0..T::COLUMN_COUNT)
-                .into_iter()
                 .map(|_| ToSqlDyn::create_static(&Null))
                 .collect(),
         }
@@ -400,7 +408,7 @@ impl_as_params!(u32, SqlColumnType::Integer);
 impl_as_params!(usize, SqlColumnType::Integer);
 impl_as_params_base!(u64, SqlColumnType::Integer);
 
-impl<'a> AsParams for u64 {
+impl AsParams for u64 {
     fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>> {
         if *self > i64::MAX as u64 {
             vec![ToSqlDyn::Boxed(Box::new(i64::from_ne_bytes(
@@ -412,7 +420,7 @@ impl<'a> AsParams for u64 {
     }
 }
 
-impl<'a> ExtractFromRow for u64 {
+impl ExtractFromRow for u64 {
     fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
         match row.get::<&str, i64>(column_name) {
             Ok(it) => Ok(u64::from_ne_bytes(it.to_ne_bytes())),
@@ -773,15 +781,15 @@ pub fn insert_into_table<'a, T: ToTable<'a> + Clone>(
     let params = value.as_params();
     let params: Vec<_> = params.iter().map(|p| p.as_dyn()).collect();
     match stmt.execute(params.as_slice()) {
-        Ok(_) => return Ok(true),
+        Ok(_) => Ok(true),
         Err(rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error {
                 code: ErrorCode::ConstraintViolation,
                 ..
             },
             _,
-        )) => return Ok(false),
-        Err(e) => return Err(e),
+        )) => Ok(false),
+        Err(e) => Err(e),
     }
 }
 
@@ -832,7 +840,7 @@ pub fn update<'a, T: ToTable<'a>, V: AsParamsOptional + AsColumnsOptional, F: fi
     let sql = sql.trim_end_matches(" WHERE ");
     debug_sql(sql);
 
-    let mut statement = connection.prepare(&sql)?;
+    let mut statement = connection.prepare(sql)?;
     let params = value.as_params_skip_optional();
     let params: Vec<_> = params.iter().map(|p| p.as_dyn()).collect();
     statement.execute(params.as_slice())
