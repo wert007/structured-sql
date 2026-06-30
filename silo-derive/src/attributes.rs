@@ -1,5 +1,8 @@
+use proc_macro2::Span;
 use quote::quote;
-use syn::Attribute;
+use syn::{Attribute, spanned::Spanned};
+
+use crate::error::{Error, ErrorKind};
 
 pub enum StructuredAttributeArguments {
     Identifier(String),
@@ -14,6 +17,7 @@ impl StructuredAttributeArguments {
 }
 
 pub struct StructuredAttribute {
+    span: Span,
     path: String,
     arguments: StructuredAttributeArguments,
 }
@@ -21,7 +25,12 @@ impl StructuredAttribute {
     fn new(attribute: &Attribute) -> Option<Self> {
         let path = attribute.path().get_ident()?.to_string();
         let arguments = StructuredAttributeArguments::new(attribute.parse_args().ok()?)?;
-        Some(Self { path, arguments })
+        let span = attribute.span();
+        Some(Self {
+            path,
+            arguments,
+            span,
+        })
     }
 }
 
@@ -36,14 +45,17 @@ pub struct ToTableAttributesStruct {
 }
 
 impl ToTableAttributesStruct {
-    pub fn parse(attrs: &[Attribute]) -> ToTableAttributesStruct {
+    pub fn parse(attrs: &[Attribute]) -> Result<ToTableAttributesStruct, Error> {
         let mut this = Self::default();
         for attribute in attrs {
             let Some(attribute) = StructuredAttribute::new(attribute) else {
                 panic!("Invalid attribute");
             };
             if attribute.path != "silo" {
-                panic!("Invalid attribute");
+                return Err(Error::new(
+                    attribute.span,
+                    ErrorKind::InvalidAttribute(attribute.path),
+                ));
             }
             match attribute.arguments {
                 StructuredAttributeArguments::Identifier(name) => match name.as_str() {
@@ -60,21 +72,7 @@ impl ToTableAttributesStruct {
             }
         }
 
-        this.validate();
-        this
-    }
-
-    fn validate(&self) {
-        let on_conflict = [
-            self.on_conflict_abort,
-            self.on_conflict_fail,
-            self.on_conflict_ignore,
-            self.on_conflict_replace,
-            self.on_conflict_rollback,
-        ];
-        if on_conflict.iter().fold(0, |acc, cur| acc + *cur as usize) > 1 {
-            panic!("Only one on conflict attribute can be active at once.");
-        }
+        Ok(this)
     }
 
     pub fn on_conflict(&self) -> proc_macro2::TokenStream {

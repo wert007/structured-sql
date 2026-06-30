@@ -1,303 +1,305 @@
-use std::any::type_name_of_val;
+// use std::any::type_name_of_val;
 
-use silo::{Database, MigrationHandler, PartialType, SqlTable, StaticStringStorage, ToTable};
+// use silo::{Database, MigrationHandler, PartialType, SqlTable, StaticStringStorage, ToTable};
 
-extern crate alloc;
-extern crate core;
-// mod crashtest;
+// extern crate alloc;
+// extern crate core;
+// // mod crashtest;
 
-#[derive(Debug, IntoSqlTable, Clone)]
-#[silo(migrate)]
-struct Point {
-    x: i32,
-    // #[silo(skip)]
-    y: i32,
-}
-
-impl MigrationHandler for Point {}
-
-// #[derive(Default)]
-// struct FruitFilter2 {
-//     __silo_variant: <&'static str as silo::HasFilter>::Filter,
+// #[derive(Debug, IntoSqlTable, Clone)]
+// #[silo(migrate)]
+// struct Point {
+//     x: i32,
+//     // #[silo(skip)]
+//     y: i32,
 // }
 
-// impl silo::IntoGenericFilter for FruitFilter2 {
-//     fn into_generic(
-//         self,
-//         string_storage: &mut silo::StaticStringStorage,
-//         column_name: Option<std::borrow::Cow<'static, str>>,
-//     ) -> silo::GenericFilter {
-//         let mut result = silo::GenericFilter::default();
-//         result.insert(
-//             stringify!(__silo_variant).into(),
-//             self.__silo_variant,
-//             string_storage,
-//         );
-//         result
+// impl MigrationHandler for Point {}
+
+// // #[derive(Default)]
+// // struct FruitFilter2 {
+// //     __silo_variant: <&'static str as silo::HasFilter>::Filter,
+// // }
+
+// // impl silo::IntoGenericFilter for FruitFilter2 {
+// //     fn into_generic(
+// //         self,
+// //         string_storage: &mut silo::StaticStringStorage,
+// //         column_name: Option<std::borrow::Cow<'static, str>>,
+// //     ) -> silo::GenericFilter {
+// //         let mut result = silo::GenericFilter::default();
+// //         result.insert(
+// //             stringify!(__silo_variant).into(),
+// //             self.__silo_variant,
+// //             string_storage,
+// //         );
+// //         result
+// //     }
+// // }
+
+// #[derive(Debug, silo::ToRows, Clone, Default)]
+// enum Fruit {
+//     #[default]
+//     Apple,
+//     Pear,
+//     Banana,
+//     Strawberry,
+// }
+
+// #[derive(Debug, silo::ToRows, Clone)]
+// enum FruitWithData {
+//     Apple(f32),
+//     Pear,
+//     Banana { ripeness: String },
+// }
+
+// #[derive(Debug, silo::Table, Clone)]
+// #[silo(migrate)]
+// struct Test {
+//     #[silo(primary)]
+//     id: u32,
+//     value1: Point,
+//     // #[silo(skip)]
+//     // #[silo(unique)]
+//     value2: String,
+//     value3: FruitWithData,
+//     age: f64,
+// }
+
+// impl MigrationHandler for Test {
+//     fn migrate(
+//         string_storage: &mut StaticStringStorage,
+//         mut partial: Self::Partial,
+//         row: &silo::rusqlite::Row,
+//         connection: &silo::rusqlite::Connection,
+//     ) -> Option<Self> {
+//         use silo::FromRow;
+//         let age = u32::try_from_row(string_storage, Some("age".into()), row, connection)
+//             .map(|v| v as f64);
+//         partial.age.get_or_insert(age.unwrap_or(55.2));
+//         partial.transpose()
 //     }
 // }
 
-#[derive(Debug, silo::ToRows, Clone, Default)]
-enum Fruit {
-    #[default]
-    Apple,
-    Pear,
-    Banana,
-    Strawberry,
-}
+// #[derive(Default, Debug, Clone, silo_derive::ToRows)]
+// pub enum Availability {
+//     Now {
+//         video_url: String,
+//     },
+//     #[default]
+//     Later,
+//     Missed,
+// }
 
-#[derive(Debug, silo::ToRows, Clone)]
-enum FruitWithData {
-    Apple(f32),
-    Pear,
-    Banana { ripeness: String },
-}
+// #[derive(Default, Debug, Clone, IntoSqlTable)]
+// #[silo(migrate)]
+// pub struct Movie {
+//     #[silo(primary)]
+//     title: String,
+//     url: String,
+//     available: Availability,
+// }
 
-#[derive(Debug, silo::Table, Clone)]
-#[silo(migrate)]
-struct Test {
-    #[silo(primary)]
-    id: u32,
-    value1: Point,
-    // #[silo(skip)]
-    // #[silo(unique)]
-    value2: String,
-    value3: FruitWithData,
-    age: f64,
-}
+// impl silo::MigrationHandler for Movie {
+//     fn migrate(
+//         _string_storage: &mut StaticStringStorage,
+//         partial: Self::Partial,
+//         _row: &rusqlite::Row,
+//         _connection: &rusqlite::Connection,
+//     ) -> Option<Self> {
+//         Some(partial.transpose().expect("Should not fail!"))
+//     }
+// }
 
-impl MigrationHandler for Test {
-    fn migrate(
-        string_storage: &mut StaticStringStorage,
-        mut partial: Self::Partial,
-        row: &silo::rusqlite::Row,
-        connection: &silo::rusqlite::Connection,
-    ) -> Option<Self> {
-        use silo::FromRow;
-        let age = u32::try_from_row(string_storage, Some("age".into()), row, connection)
-            .map(|v| v as f64);
-        partial.age.get_or_insert(age.unwrap_or(55.2));
-        partial.transpose()
-    }
-}
+// #[derive(Clone, Debug, Eq, PartialEq)]
+// pub struct Credits {
+//     cast: Vec<Cast>,
+//     crew: Vec<Crew>,
+// }
 
-#[derive(Default, Debug, Clone, silo_derive::ToRows)]
-pub enum Availability {
-    Now {
-        video_url: String,
-    },
-    #[default]
-    Later,
-    Missed,
-}
+// #[derive(Clone, Debug, Eq, PartialEq, IntoSqlTable)]
+// pub struct Crew {
+//     department: String,
+//     gender: Option<u8>,
+//     id: u32,
+//     job: String,
+//     name: String,
+//     profile_path: Option<String>,
+// }
 
-#[derive(Default, Debug, Clone, IntoSqlTable)]
-#[silo(migrate)]
-pub struct Movie {
-    #[silo(primary)]
-    title: String,
-    url: String,
-    available: Availability,
-}
+// #[derive(Clone, Debug, Eq, PartialEq, IntoSqlTable)]
+// pub struct Cast {
+//     id: u32,
+//     cast_id: u32,
+//     character: String,
+//     gender: Option<u8>,
+//     name: String,
+//     profile_path: Option<String>,
+//     order: u8,
+// }
 
-impl silo::MigrationHandler for Movie {
-    fn migrate(
-        _string_storage: &mut StaticStringStorage,
-        partial: Self::Partial,
-        _row: &rusqlite::Row,
-        _connection: &rusqlite::Connection,
-    ) -> Option<Self> {
-        Some(partial.transpose().expect("Should not fail!"))
-    }
-}
+// #[derive(Clone, Debug, PartialEq, IntoSqlTable)]
+// pub struct Genre {
+//     #[silo(primary)]
+//     id: u16,
+//     name: String,
+// }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Credits {
-    cast: Vec<Cast>,
-    crew: Vec<Crew>,
-}
+// #[derive(Debug, PartialEq, IntoSqlTable, Clone)]
+// pub struct MovieWithGenres {
+//     movie_id: u32,
+//     genre_id: u16,
+// }
 
-#[derive(Clone, Debug, Eq, PartialEq, IntoSqlTable)]
-pub struct Crew {
-    department: String,
-    gender: Option<u8>,
-    id: u32,
-    job: String,
-    name: String,
-    profile_path: Option<String>,
-}
+// #[derive(Default, Clone, Debug, PartialEq, IntoSqlTable)]
+// #[silo(migrate)]
+// pub struct TmdbMovie {
+//     #[silo(primary)]
+//     id: u32,
+//     imdb_id: u32,
+//     title: String,
+//     tagline: String,
+//     original_title: String,
+//     original_language: String,
+//     overview: Option<String>,
+//     // #[silo(skip)]
+//     // release_date: time::OffsetDateTime,
+//     runtime: u32,
+//     homepage: Option<String>,
+//     #[silo(skip)]
+//     genres: Vec<Genre>,
+//     poster_path: Option<String>,
+//     backdrop_path: Option<String>,
+//     popularity: f64,
+//     budget: u64,
+//     adult: bool,
+//     #[silo(skip)]
+//     credits: Option<Credits>,
+// }
 
-#[derive(Clone, Debug, Eq, PartialEq, IntoSqlTable)]
-pub struct Cast {
-    id: u32,
-    cast_id: u32,
-    character: String,
-    gender: Option<u8>,
-    name: String,
-    profile_path: Option<String>,
-    order: u8,
-}
+// impl MigrationHandler for TmdbMovie {
+//     fn migrate(
+//         _string_storage: &mut StaticStringStorage,
+//         partial: Self::Partial,
+//         _row: &silo::rusqlite::Row,
+//         _connection: &silo::rusqlite::Connection,
+//     ) -> Option<Self> {
+//         // if partial.release_date.is_none() {
+//         //     partial.release_date = Some(time::OffsetDateTime::now_utc());
+//         // }
+//         Some(partial.transpose().expect("No failure"))
+//     }
+// }
 
-#[derive(Clone, Debug, PartialEq, IntoSqlTable)]
-pub struct Genre {
-    #[silo(primary)]
-    id: u16,
-    name: String,
-}
+// #[derive(Debug, Clone, IntoSqlTable)]
+// pub struct FutureMovie {
+//     pub url: String,
+// }
 
-#[derive(Debug, PartialEq, IntoSqlTable, Clone)]
-pub struct MovieWithGenres {
-    movie_id: u32,
-    genre_id: u16,
-}
+// #[derive(Default, Clone, Debug)]
+// // TODO: Foreign keys and shit!
+// // #[derive(Default, Clone, Debug, IntoSqlTable)]
+// pub struct MovieWithRatings {
+//     pub(crate) movie: Movie,
+//     pub(crate) ratings: TmdbMovie,
+// }
 
-#[derive(Default, Clone, Debug, PartialEq, IntoSqlTable)]
-#[silo(migrate)]
-pub struct TmdbMovie {
-    #[silo(primary)]
-    id: u32,
-    imdb_id: u32,
-    title: String,
-    tagline: String,
-    original_title: String,
-    original_language: String,
-    overview: Option<String>,
-    // #[silo(skip)]
-    // release_date: time::OffsetDateTime,
-    runtime: u32,
-    homepage: Option<String>,
-    #[silo(skip)]
-    genres: Vec<Genre>,
-    poster_path: Option<String>,
-    backdrop_path: Option<String>,
-    popularity: f64,
-    budget: u64,
-    adult: bool,
-    #[silo(skip)]
-    credits: Option<Credits>,
-}
+// // const _: () = const { assert!(matches!(Point::COLUMNS.len(), 2)) };
+// // // const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
+// // const _: () = const { assert!(matches!(Fruit::COLUMNS.len(), 1)) };
+// // const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
+// // const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
 
-impl MigrationHandler for TmdbMovie {
-    fn migrate(
-        _string_storage: &mut StaticStringStorage,
-        partial: Self::Partial,
-        _row: &silo::rusqlite::Row,
-        _connection: &silo::rusqlite::Connection,
-    ) -> Option<Self> {
-        // if partial.release_date.is_none() {
-        //     partial.release_date = Some(time::OffsetDateTime::now_utc());
-        // }
-        Some(partial.transpose().expect("No failure"))
-    }
-}
+// fn main() {
+//     let test_db = Database::create_in_memory().unwrap();
+//     let test_db = Database::open("test-before.db").unwrap();
+//     test_db.check::<Test>().unwrap();
+//     // test_db.save("test-before.db").unwrap();
 
-#[derive(Debug, Clone, IntoSqlTable)]
-pub struct FutureMovie {
-    pub url: String,
-}
+//     // test.insert(Test {
+//     //     id: std::time::Instant::now().elapsed().as_nanos() as u32,
+//     //     value1: Point { x: 12, y: 42 },
+//     //     value2: "f32::EPSILON".into(),
+//     //     value3: FruitWithData::Banana {
+//     //         ripeness: "Very".into(),
+//     //     },
+//     //     age: f64::NAN,
+//     // })
+//     // .unwrap();
 
-#[derive(Default, Clone, Debug)]
-// TODO: Foreign keys and shit!
-// #[derive(Default, Clone, Debug, IntoSqlTable)]
-pub struct MovieWithRatings {
-    pub(crate) movie: Movie,
-    pub(crate) ratings: TmdbMovie,
-}
+//     // assert!(TmdbMovie::default().as_primary_key().is_some());
+//     // assert!(MovieWithRatings::default().as_primary_key().is_some());
 
-// const _: () = const { assert!(matches!(Point::COLUMNS.len(), 2)) };
-// // const _: () = const { assert!(matches!(Test::COLUMNS.len(), 6)) };
-// const _: () = const { assert!(matches!(Fruit::COLUMNS.len(), 1)) };
-// const _: () = const { assert!(!matches!(Availability::PARAM_COUNT, 3)) };
-// const _: () = const { assert!(matches!(FruitWithData::COLUMNS.len(), 3)) };
+//     TestFilter {
+//         value1: (PointFilter {
+//             x: silo::SqlColumnFilter::MustBeEqual(12),
+//             ..Default::default()
+//         }),
+//         // value3: (FruitWithDataFilter {
+//         //     filter: silo::SqlColumnFilter::MustBeEqual("Banana"),
+//         // }),
+//         ..Default::default()
+//     };
+//     // _ = dbg!(test.filter(f));
+//     test_db.save("test.db").unwrap();
 
-fn main() {
-    let test_db = Database::create_in_memory().unwrap();
-    let test_db = Database::open("test-before.db").unwrap();
-    test_db.check::<Test>().unwrap();
-    // test_db.save("test-before.db").unwrap();
+//     // crashtest::crash_test();
+//     // let table = test_db.load::<TmdbMovie>().unwrap();
+//     // table
+//     //     .insert(TmdbMovie {
+//     //         id: 0,
+//     //         imdb_id: 0,
+//     //         title: "Hello!".into(),
+//     //         tagline: "Hello!".into(),
+//     //         original_title: "Hello!".into(),
+//     //         original_language: "Hello!".into(),
+//     //         overview: None,
+//     //         runtime: 5,
+//     //         homepage: None,
+//     //         poster_path: None,
+//     //         backdrop_path: None,
+//     //         popularity: 4.0,
+//     //         budget: 2,
+//     //         adult: true,
+//     //         credits: None,
+//     //     })
+//     //     .unwrap();
+//     // let table = test_db.load::<MovieWithRatings>().unwrap();
+//     // for e in crashtest::crash_test() {
+//     //     table.insert(e).unwrap();
+//     // }
+//     // let table = test_db.load::<Movie>().unwrap();
+//     // table
+//     //     .insert(Movie {
+//     //         title: "Hello".into(),
+//     //         url: "dotcom".into(),
+//     //         available: Availability::Later,
+//     //     })
+//     //     .unwrap();
+//     // dbg!(result.into_iter().map(|f| f.url).collect::<Vec<_>>());
 
-    // test.insert(Test {
-    //     id: std::time::Instant::now().elapsed().as_nanos() as u32,
-    //     value1: Point { x: 12, y: 42 },
-    //     value2: "f32::EPSILON".into(),
-    //     value3: FruitWithData::Banana {
-    //         ripeness: "Very".into(),
-    //     },
-    //     age: f64::NAN,
-    // })
-    // .unwrap();
+//     // let vt = test_db.load2::<FooWithVec>().unwrap();
+//     // // test_db.check::<FooWithVec>().unwrap();
+//     // vt.insert(FooWithVec {
+//     //     iddasda: 0,
+//     //     values: vec![
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //         "1".into(),
+//     //     ],
+//     // })
+//     // .unwrap();
+//     test_db.save("test.db").unwrap();
+//     println!("Hello, world!");
+// }
 
-    // assert!(TmdbMovie::default().as_primary_key().is_some());
-    // assert!(MovieWithRatings::default().as_primary_key().is_some());
-
-    TestFilter {
-        value1: (PointFilter {
-            x: silo::SqlColumnFilter::MustBeEqual(12),
-            ..Default::default()
-        }),
-        // value3: (FruitWithDataFilter {
-        //     filter: silo::SqlColumnFilter::MustBeEqual("Banana"),
-        // }),
-        ..Default::default()
-    };
-    // _ = dbg!(test.filter(f));
-    test_db.save("test.db").unwrap();
-
-    // crashtest::crash_test();
-    // let table = test_db.load::<TmdbMovie>().unwrap();
-    // table
-    //     .insert(TmdbMovie {
-    //         id: 0,
-    //         imdb_id: 0,
-    //         title: "Hello!".into(),
-    //         tagline: "Hello!".into(),
-    //         original_title: "Hello!".into(),
-    //         original_language: "Hello!".into(),
-    //         overview: None,
-    //         runtime: 5,
-    //         homepage: None,
-    //         poster_path: None,
-    //         backdrop_path: None,
-    //         popularity: 4.0,
-    //         budget: 2,
-    //         adult: true,
-    //         credits: None,
-    //     })
-    //     .unwrap();
-    // let table = test_db.load::<MovieWithRatings>().unwrap();
-    // for e in crashtest::crash_test() {
-    //     table.insert(e).unwrap();
-    // }
-    // let table = test_db.load::<Movie>().unwrap();
-    // table
-    //     .insert(Movie {
-    //         title: "Hello".into(),
-    //         url: "dotcom".into(),
-    //         available: Availability::Later,
-    //     })
-    //     .unwrap();
-    // dbg!(result.into_iter().map(|f| f.url).collect::<Vec<_>>());
-
-    // let vt = test_db.load2::<FooWithVec>().unwrap();
-    // // test_db.check::<FooWithVec>().unwrap();
-    // vt.insert(FooWithVec {
-    //     iddasda: 0,
-    //     values: vec![
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //         "1".into(),
-    //     ],
-    // })
-    // .unwrap();
-    test_db.save("test.db").unwrap();
-    println!("Hello, world!");
-}
+fn main() {}

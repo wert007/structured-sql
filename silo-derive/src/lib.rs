@@ -10,8 +10,41 @@ mod attributes;
 mod base_struct;
 mod error;
 
-// #[macro_export]
 #[proc_macro_derive(ToTable, attributes(silo))]
+/// This allows you to use your struct as a table definition.
+///
+/// If a struct does not have any fields, or they are skipped, then there is
+/// nothing to put into a table.
+///
+/// ```compile_fail
+///
+/// #[derive(Debug, Clone, silo_derive::ToTable)]
+/// struct EmptyTable {}
+///
+/// #[derive(Debug, Clone, silo_derive::ToColumns)]
+/// struct EmptyColumns {}
+/// ```
+///
+/// # Attributes
+///
+/// ## Struct Attributes
+///
+/// ## Field Attributes
+///
+/// **#[[silo(primary)]]**
+///
+/// You can designate one field as primary field. If you have multiple fields
+/// marked as primary, compilation will fail.
+///
+/// ```compile_fail
+/// #[derive(Debug, Clone, silo_derive::ToTable)]
+/// struct Person {
+///     #[silo(primary)]
+///     id: usize,
+///     #[silo(primary)]
+///     last_name: String
+/// }
+/// ```
 pub fn derive_to_table(input: TokenStream) -> TokenStream {
     // syn::Data
     let input: syn::DeriveInput = syn::parse(input)

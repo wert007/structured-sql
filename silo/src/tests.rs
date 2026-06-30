@@ -3,7 +3,6 @@ use uuid::Uuid;
 
 use crate::{
     self as silo, AsColumns, AsColumnsDynamicallySized, Database, SqlTable, column_name_of,
-    toggle_debug_sql,
 };
 
 #[derive(Default, Debug, Clone, silo::derive::ToColumns)]
@@ -24,7 +23,6 @@ struct Person {
 
 #[test]
 fn creates_table_for_nested_struct() {
-    toggle_debug_sql();
     let db = Database::create_in_memory().unwrap();
 
     db.load::<Person>().unwrap();
@@ -100,12 +98,6 @@ fn nested_columns_are_flattened() {
     );
 }
 
-#[derive(Debug, Clone, silo::derive::ToTable)]
-struct EmptyTable {}
-
-#[derive(Debug, Clone, silo::derive::ToColumns)]
-struct EmptyColumns {}
-
 #[test]
 fn test_3_level_deep_nesting() {
     #[derive(Debug, Clone, ToColumns)]
@@ -114,7 +106,6 @@ fn test_3_level_deep_nesting() {
     }
 
     #[derive(Debug, Clone, ToColumns)]
-
     struct Address {
         city: String,
         country: Country,
@@ -124,6 +115,7 @@ fn test_3_level_deep_nesting() {
     struct Person {
         address: Address,
     }
+
     let c = column_name_of!(Person, address.country.code);
     assert_eq!(c, "address_country_code");
     let columns: Vec<_> = Person::columns(None, false, false)
@@ -141,7 +133,6 @@ fn test_3_level_deep_nesting_with_option() {
     }
 
     #[derive(Debug, Clone, ToColumns)]
-
     struct Address {
         city: String,
         country: Country,
@@ -151,6 +142,7 @@ fn test_3_level_deep_nesting_with_option() {
     struct Person {
         address: Option<Address>,
     }
+
     let c = column_name_of!(Person, address.country.code);
     assert_eq!(c, "address_country_code");
     let columns: Vec<_> = Person::columns(None, false, false)
@@ -160,32 +152,24 @@ fn test_3_level_deep_nesting_with_option() {
     assert_eq!(columns, ["address_city", "address_country_code"]);
 }
 
-#[derive(Debug, Clone, ToTable)]
-struct MultiplePrimaryFail {
-    #[silo(primary)]
-    a: usize,
-    #[silo(primary)]
-    b: usize,
-}
-
 #[test]
 fn duplicate_names() {
     #[derive(Debug, Clone, ToColumns)]
-
     struct A {
         city: String,
     }
-    #[derive(Debug, Clone, ToColumns)]
 
+    #[derive(Debug, Clone, ToColumns)]
     struct B {
         city: String,
     }
-    #[derive(Debug, Clone, ToColumns)]
 
+    #[derive(Debug, Clone, ToColumns)]
     struct C {
         a: A,
         b: B,
     }
+
     assert_eq!(column_name_of!(C, a.city), "a_city");
     assert_eq!(column_name_of!(C, b.city), "b_city");
 

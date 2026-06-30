@@ -224,14 +224,6 @@ impl StructData {
         format_ident!("Partial{}", self.name)
     }
 
-    pub(crate) fn remaining_elements(&self) -> Vec<Ident> {
-        self.members
-            .iter()
-            .filter(|m| !m.is_skipped && m.is_remaining_element)
-            .map(|m| m.name.clone())
-            .collect()
-    }
-
     pub(crate) fn from_struct_data(
         visibility: Visibility,
         name: Ident,
@@ -241,6 +233,7 @@ impl StructData {
             .into_iter()
             .map(|f| (AttributeFieldData::parse(&f.attrs), f))
             .collect();
+        let name_span = name.span();
         let mut this = Self {
             visibility,
             original_name: name.clone(),
@@ -252,6 +245,17 @@ impl StructData {
             is_partial: false,
             is_row_type: false,
         };
+        if fields.iter().filter(|f| !f.0.is_skip).next().is_none() {
+            return Err(Error::new(name_span, crate::error::ErrorKind::NoColumns));
+        }
+        if let Some(multiple_primaries) = fields.iter().filter(|f| f.0.is_primary).nth(1) {
+            return Err(Error::new(
+                // TODO: I would like ident.span() more, but if it is a tuple
+                // type, we would need its type instead.
+                multiple_primaries.1.span(),
+                crate::error::ErrorKind::TooManyPrimaries,
+            ));
+        }
         this.populate_members(fields);
         Ok(this)
     }
@@ -344,24 +348,12 @@ impl StructData {
         }
     }
 
-    pub(crate) fn variant_names(&self) -> Vec<&Ident> {
-        self.variants.iter().map(|v| &v.name).collect()
-    }
-
     pub(crate) fn variant_patterns(&self) -> Vec<TokenStream> {
         self.variants.iter().map(|v| v.create_pattern()).collect()
     }
 
     pub(crate) fn variants_fields(&self) -> Vec<Vec<VariantField>> {
         self.variants.iter().map(|v| v.fields.clone()).collect()
-    }
-
-    pub(crate) fn non_vec_fields(&self) -> Vec<Field<'_>> {
-        self.members
-            .iter()
-            // .filter(|m| !m.type_.is_vec())
-            .map(|m| m.to_field())
-            .collect()
     }
 
     pub(crate) fn primary_key_field(&self) -> Option<Field<'_>> {

@@ -4,7 +4,6 @@ use syn::{Ident, Visibility};
 use crate::{attributes, base_struct};
 
 pub mod as_params;
-mod enum_helper;
 pub mod filter;
 pub mod from_row;
 mod from_row_type;
@@ -34,7 +33,7 @@ impl ToTable {
         visibility: Visibility,
         data_struct: syn::DataStruct,
     ) -> Result<Self, crate::error::Error> {
-        let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs);
+        let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs)?;
         let on_conflict = attribute_struct_data.on_conflict();
 
         let base_struct: base_struct::StructData = base_struct::StructData::from_struct_data(
@@ -56,7 +55,7 @@ impl ToTable {
         visibility: Visibility,
         data_enum: syn::DataEnum,
     ) -> Result<ToTable, crate::error::Error> {
-        let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs);
+        let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs)?;
         let on_conflict = attribute_struct_data.on_conflict();
         let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
         let base_struct: base_struct::StructData = base_struct::StructData::from_enum_data(

@@ -16,6 +16,17 @@ mod conversions;
 pub mod filter;
 pub mod projections;
 
+pub mod derive {
+    pub use silo_derive::ToColumns;
+    pub use silo_derive::ToTable;
+}
+
+use time::OffsetDateTime;
+use time::{Date, Time};
+use uuid::{NonNilUuid, Uuid};
+
+use crate::projections::{Projectable, Projection, ProjectionColumns};
+
 #[cfg(test)]
 mod tests;
 
@@ -61,6 +72,7 @@ macro_rules! type_checker {
     };
 }
 
+/// This is used by column_name_of to support r#raw identifier correctly.
 pub const fn strip_leading_raw_identifier(ident: &str) -> &str {
     konst::string::trim_start_matches(ident, "r#")
 }
@@ -77,8 +89,12 @@ macro_rules! __concat_str_array {
 /// **Usage example**
 ///
 /// ```rust
-///     column_name_of!(Coordinate, x) // == Cow::Borrowed("x")
-///     column_name_of!(Rect, top_left.x) // == Cow::Borrowed("top_left_x")
+///# use std::borrow::Cow;
+///# use silo::column_name_of;
+///# struct Coordinate {x: f32, y: f32}
+///# struct Rect {top_left: Coordinate, bottom_right: Coordinate}
+///     assert_eq!(column_name_of!(Coordinate, x), Cow::Borrowed("x"));
+///     assert_eq!(column_name_of!(Rect, top_left.x), Cow::Borrowed("top_left_x"));
 /// ```
 ///
 /// **Description**
@@ -108,10 +124,12 @@ macro_rules! column_name_of {
 pub static DEBUG_SQL: AtomicBool = AtomicBool::new(false);
 
 #[cfg(feature = "enable_debug_sql")]
+#[track_caller]
 pub fn toggle_debug_sql() {
     DEBUG_SQL.update(SeqCst, SeqCst, |b| !b);
 }
 #[cfg(not(feature = "enable_debug_sql"))]
+#[track_caller]
 pub fn toggle_debug_sql() {
     panic!("This is only enabled with the enable_debug_sql feature");
 }
@@ -144,17 +162,6 @@ impl ToSqlDyn<'static> {
         Self::Borrowed(v)
     }
 }
-
-pub mod derive {
-    pub use silo_derive::ToColumns;
-    pub use silo_derive::ToTable;
-}
-
-use time::OffsetDateTime;
-use time::{Date, Time};
-use uuid::{NonNilUuid, Uuid};
-
-use crate::projections::{Projectable, Projection, ProjectionColumns};
 
 pub struct Database {
     connection: rusqlite::Connection,
