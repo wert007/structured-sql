@@ -5,7 +5,7 @@ use syn::{LitStr, ext::IdentExt};
 pub(crate) fn create_as_params(
     base_struct: &super::base_struct::StructData,
     tokens: &mut proc_macro2::TokenStream,
-    for_table: bool,
+    _for_table: bool,
 ) {
     let name = &base_struct.name;
     let columns = base_struct.columns();

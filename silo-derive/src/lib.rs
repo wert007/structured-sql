@@ -77,7 +77,7 @@ pub fn derive_to_columns(input: TokenStream) -> TokenStream {
         syn::Data::Struct(data_struct) => {
             ToColumns::from_struct(input.attrs, input.ident, input.vis, data_struct)
         }
-        syn::Data::Enum(data_enum) => {
+        syn::Data::Enum(_data_enum) => {
             panic!("Enums are currently not supported.")
         }
         syn::Data::Union(_) => {

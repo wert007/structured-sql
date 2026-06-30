@@ -1,4 +1,4 @@
-use crate::{attributes, base_struct};
+use crate::base_struct;
 use quote::ToTokens;
 use syn::{Ident, Visibility};
 
@@ -14,7 +14,7 @@ pub struct ToColumns {
 
 impl ToColumns {
     pub fn from_struct(
-        attrs: Vec<syn::Attribute>,
+        _attrs: Vec<syn::Attribute>,
         name: Ident,
         visibility: Visibility,
         data_struct: syn::DataStruct,

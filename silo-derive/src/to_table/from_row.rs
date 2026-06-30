@@ -47,7 +47,7 @@ fn create_try_from_row_body(
     });
     let column_types = columns.iter().map(|c| c.type_);
 
-    if let Some(variant) = base_struct.variant_field().map(|f| f.name) {
+    if let Some(_variant) = base_struct.variant_field().map(|f| f.name) {
         quote! {todo!("Enums not yet supported!")}
     } else {
         quote! {#(
