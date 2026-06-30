@@ -87,6 +87,7 @@ macro_rules! __concat_str_array {
 
 #[macro_export]
 /// **Usage example**
+/// Macro to get the column name for a given struct and field.
 ///
 /// ```rust
 ///# use std::borrow::Cow;

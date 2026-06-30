@@ -1,6 +1,6 @@
 use crate::{AsParams, ToSqlDyn, conversions::ToSqlValueString};
 use chrono::{DateTime, Utc};
-use std::fmt::Write;
+use std::{borrow::Borrow, fmt::Write, ops::Deref};
 use uuid::{NonNilUuid, Uuid};
 
 #[derive(Default)]
@@ -37,8 +37,7 @@ impl<T: Filter> Filter for OptionalFilter<T> {
 pub enum FieldFilter<T: IsFieldFilter> {
     None,
     Not(Box<FieldFilter<T>>),
-    Contains(T),
-    Equals(T),
+    Comparison(T, ComparisonOperator),
 }
 
 impl<T: IsFieldFilter> FieldFilter<T> {
@@ -47,14 +46,30 @@ impl<T: IsFieldFilter> FieldFilter<T> {
     }
 
     pub fn contains(t: &T) -> Self {
-        Self::Contains(t.clone())
+        Self::Comparison(t.clone(), ComparisonOperator::Like)
     }
 
-    pub fn equals(t: &T) -> Self {
-        Self::Equals(t.clone())
+    pub fn equals(t: impl Into<T>) -> Self {
+        Self::Comparison(t.into(), ComparisonOperator::Equals)
     }
 
-    pub fn not(f: FieldFilter<T>) -> FieldFilter<T> {
+    pub fn greater_than(t: impl Into<T>) -> Self {
+        Self::Comparison(t.into(), ComparisonOperator::GreaterThan)
+    }
+
+    pub fn greater_than_equals(t: impl Into<T>) -> Self {
+        Self::Comparison(t.into(), ComparisonOperator::GreaterThanEquals)
+    }
+
+    pub fn less_than(t: impl Into<T>) -> Self {
+        Self::Comparison(t.into(), ComparisonOperator::LessThan)
+    }
+
+    pub fn less_than_equals(t: impl Into<T>) -> Self {
+        Self::Comparison(t.into(), ComparisonOperator::LessThanEquals)
+    }
+
+    pub fn not(f: FieldFilter<T>) -> Self {
         Self::Not(Box::new(f))
     }
 }
@@ -64,7 +79,9 @@ impl<T: IsFieldFilter> AsParams for FieldFilter<T> {
         match self {
             FieldFilter::None => Vec::new(),
             FieldFilter::Not(field_filter) => field_filter.as_params(),
-            FieldFilter::Contains(it) | FieldFilter::Equals(it) => vec![ToSqlDyn::Borrowed(it)],
+            FieldFilter::Comparison(it, _) => {
+                vec![ToSqlDyn::Borrowed(it)]
+            }
         }
     }
 }
@@ -85,25 +102,16 @@ impl<T: IsFieldFilter> Filter for FieldFilter<T> {
             FieldFilter::None => {}
             FieldFilter::Not(field_filter) => {
                 ensure_where_or_and(sql);
-                _ = write!(sql, " NOT (");
+                _ = write!(sql, "NOT (");
                 field_filter.to_sql(sql, parent);
                 _ = write!(sql, ")");
             }
-            FieldFilter::Contains(it) => {
+            FieldFilter::Comparison(it, operator) => {
                 ensure_where_or_and(sql);
                 <T as IsFieldFilter>::to_sql(
                     it,
                     sql,
-                    ComparisonOperator::Like,
-                    parent.expect("Needs a column name for comparison."),
-                );
-            }
-            FieldFilter::Equals(it) => {
-                ensure_where_or_and(sql);
-                <T as IsFieldFilter>::to_sql(
-                    it,
-                    sql,
-                    ComparisonOperator::Equals,
+                    *operator,
                     parent.expect("Needs a column name for comparison."),
                 );
             }
@@ -116,7 +124,7 @@ fn ensure_where_or_and(sql: &mut String) {
         .into_iter()
         .any(|s| sql.trim().ends_with(s))
     {
-        _ = write!(sql, " AND")
+        _ = write!(sql, " AND ")
     }
 }
 
@@ -142,7 +150,7 @@ macro_rules! impl_filterable {
         impl Filterable for $t {
             type Filter = FieldFilter<$t>;
             fn convert_to_equals_filter(self) -> Self::Filter {
-                FieldFilter::Equals(self)
+                FieldFilter::equals(self)
             }
         }
 
@@ -157,7 +165,7 @@ macro_rules! impl_filterable {
         impl Filterable for $t {
             type Filter = FieldFilter<$f>;
             fn convert_to_equals_filter(self) -> Self::Filter {
-                FieldFilter::Equals(self.to_sql_value_string())
+                FieldFilter::equals(self.to_sql_value_string())
             }
         }
     };
@@ -221,10 +229,18 @@ impl WriteToSql for String {
     }
 }
 
-#[derive(Debug, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
 pub enum ComparisonOperator {
     #[strum(to_string = "=")]
     Equals,
+    #[strum(to_string = ">")]
+    GreaterThan,
+    #[strum(to_string = ">=")]
+    GreaterThanEquals,
+    #[strum(to_string = "<")]
+    LessThan,
+    #[strum(to_string = "<=")]
+    LessThanEquals,
     #[strum(to_string = "LIKE")]
     Like,
 }

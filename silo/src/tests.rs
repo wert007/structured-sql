@@ -3,15 +3,16 @@ use uuid::Uuid;
 
 use crate::{
     self as silo, AsColumns, AsColumnsDynamicallySized, Database, SqlTable, column_name_of,
+    filter::{FieldFilter, Filterable, OptionalFilter},
 };
 
-#[derive(Default, Debug, Clone, silo::derive::ToColumns)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, silo::derive::ToColumns)]
 struct AddressTC {
     city: String,
     street: String,
 }
 
-#[derive(Default, Debug, Clone, silo::derive::ToTable)]
+#[derive(Default, PartialEq, Eq, Debug, Clone, silo::derive::ToTable)]
 struct Person {
     name: String,
     age: u8,
@@ -19,6 +20,186 @@ struct Person {
     #[silo(primary)]
     id: Uuid,
     residence: AddressTC,
+}
+
+#[test]
+fn test_person_filter() {
+    let db = Database::create_in_memory().unwrap();
+    let persons = db.load::<Person>().unwrap();
+
+    let alice = Person {
+        id: Uuid::NAMESPACE_X500,
+        name: "Alice".into(),
+        age: 25,
+        traditional_name: Some("Alicia".into()),
+        residence: AddressTC {
+            city: "Berlin".into(),
+            street: "Main St".into(),
+        },
+    };
+
+    let bob = Person {
+        id: Uuid::NAMESPACE_DNS,
+        name: "Bob".into(),
+        age: 17,
+        traditional_name: None,
+        residence: AddressTC {
+            city: "Munich".into(),
+            street: "King St".into(),
+        },
+    };
+
+    let charlie = Person {
+        id: Uuid::NAMESPACE_OID,
+        name: "Charlie".into(),
+        age: 42,
+        traditional_name: Some("Charles".into()),
+        residence: AddressTC {
+            city: "Berlin".into(),
+            street: "Second St".into(),
+        },
+    };
+
+    persons.insert(alice.clone()).unwrap();
+    persons.insert(bob.clone()).unwrap();
+    persons.insert(charlie.clone()).unwrap();
+
+    // Equality
+    let loaded = persons
+        .load_where(PersonFilter {
+            age: FieldFilter::equals(25),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded, vec![alice.clone()]);
+
+    // Greater than
+    let loaded = persons
+        .load_where(PersonFilter {
+            age: FieldFilter::greater_than(18),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded.len(), 2);
+    assert!(loaded.contains(&alice));
+    assert!(loaded.contains(&charlie));
+
+    // Greater than or equal
+    let loaded = persons
+        .load_where(PersonFilter {
+            age: FieldFilter::greater_than_equals(25),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded.len(), 2);
+
+    // Less than
+    let loaded = persons
+        .load_where(PersonFilter {
+            age: FieldFilter::less_than(18),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded, vec![bob.clone()]);
+
+    // Less than or equal
+    let loaded = persons
+        .load_where(PersonFilter {
+            age: FieldFilter::less_than_equals(17),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded, vec![bob.clone()]);
+
+    // String equality
+    let loaded = persons
+        .load_where(PersonFilter {
+            name: FieldFilter::equals("Alice"),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded, vec![alice.clone()]);
+
+    // Optional field
+    let loaded = persons
+        .load_where(PersonFilter {
+            traditional_name: OptionalFilter::IsSomeAnd(FieldFilter::equals("Charles")),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded, vec![charlie.clone()]);
+
+    // UUID
+    let loaded = persons
+        .load_where(PersonFilter {
+            id: bob.id.convert_to_equals_filter(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded, vec![bob.clone()]);
+
+    // Nested field
+    let loaded = persons
+        .load_where(PersonFilter {
+            residence: AddressTCFilter {
+                city: FieldFilter::equals("Berlin"),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded.len(), 2);
+    assert!(loaded.contains(&alice));
+    assert!(loaded.contains(&charlie));
+
+    // Multiple filters should be ANDed
+    let loaded = persons
+        .load_where(PersonFilter {
+            age: FieldFilter::greater_than(18),
+            residence: AddressTCFilter {
+                city: FieldFilter::equals("Berlin"),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded.len(), 2);
+
+    let loaded = persons
+        .load_where(PersonFilter {
+            age: FieldFilter::greater_than(30),
+            residence: AddressTCFilter {
+                city: FieldFilter::equals("Berlin"),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(loaded, vec![charlie.clone()]);
+
+    // No match
+    let loaded = persons
+        .load_where(PersonFilter {
+            age: FieldFilter::less_than(10),
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(loaded.is_empty());
+
+    // Empty filter should return everything
+    let loaded = persons.load_where(PersonFilter::default()).unwrap();
+    assert_eq!(loaded.len(), 3);
+
+    let loaded = persons
+        .load_where(PersonFilter {
+            name: alice.name.clone().convert_to_equals_filter(),
+            age: alice.age.clone().convert_to_equals_filter(),
+            traditional_name: alice.traditional_name.clone().convert_to_equals_filter(),
+            id: alice.id.clone().convert_to_equals_filter(),
+            residence: alice.residence.clone().convert_to_equals_filter(),
+        })
+        .unwrap();
+    assert_eq!(loaded, [alice])
 }
 
 #[test]
@@ -373,5 +554,49 @@ fn roundtrip_serialization() {
     let loaded = db.load_where(()).unwrap();
 
     assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0], original);
+
+    let db = Database::create_in_memory().unwrap();
+
+    let original = TypeCoverage {
+        id: Uuid::nil(),
+
+        u8_: 1,
+        u16_: 2,
+        u32_: 3,
+        u64_: 4,
+        usize_: 5,
+
+        i8_: -1,
+        i16_: -2,
+        i32_: -3,
+        i64_: -4,
+        isize_: -5,
+
+        f32_: 1.5,
+        f64_: 2.5,
+
+        bool_: false,
+
+        string_: String::new(),
+
+        uuid: Uuid::NAMESPACE_URL,
+
+        option_string: None,
+        option_i32: None,
+        option_bool: None,
+
+        nested: Nested {
+            city: String::new(),
+            street: String::new(),
+            number: 0,
+            verified: false,
+        },
+    };
+
+    let db = db.load::<TypeCoverage>().unwrap();
+    db.insert(original.clone()).unwrap();
+    let loaded = db.load_where(()).unwrap();
+
     assert_eq!(loaded[0], original);
 }
