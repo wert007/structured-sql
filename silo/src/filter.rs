@@ -88,7 +88,6 @@ impl<T: IsFieldFilter> AsParams for FieldFilter<T> {
     }
 }
 
-
 pub trait Filter: AsParams {
     fn to_sql(&self, sql: &mut String, parent: Option<&str>);
 }
