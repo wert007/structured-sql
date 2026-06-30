@@ -19,7 +19,25 @@ pub mod projections;
 #[cfg(test)]
 mod tests;
 
+/// This trait allows the type_checker macro to look inside the Option type.
+pub trait TypeCheck<T = Self>: Sized {
+    fn unwrap(self) -> T;
+}
+
+impl<T> TypeCheck<T> for T {
+    fn unwrap(self) -> T {
+        self
+    }
+}
+
+impl<U> TypeCheck<U> for Option<U> {
+    fn unwrap(self) -> U {
+        self.unwrap()
+    }
+}
+
 #[macro_export]
+/// Macro that is used to typecheck the usage of column_names_of!.
 macro_rules! type_checker {
     (
          $struct:ty,
@@ -29,15 +47,16 @@ macro_rules! type_checker {
         // The const block forces the const evaluation.
         #[allow(unreachable_code, unused_variables, clippy::diverging_sub_expression)]
         const _: () = {
-            // `if false { ... }` ensures that the unreacahble! macro invokation is indeed unreachable.
-            if false {
-                // Rust performs the type-checking at compile time even if the code is unreachable.
-                //
-                // The return type of core::unreachable!() is never type,
-                // which can be assigned to any type.
-                let unreachable_obj: $struct = core::unreachable!();
-                let _: _ = unreachable_obj.$field$(.$more_fields)*;
-            }
+                use silo::TypeCheck;
+                // `if false { ... }` ensures that the unreacahble! macro invokation is indeed unreachable.
+                if false {
+                    // Rust performs the type-checking at compile time even if the code is unreachable.
+                    //
+                    // The return type of core::unreachable!() is never type,
+                    // which can be assigned to any type.
+                    let unreachable_obj: $struct = core::unreachable!();
+                    let _: _ = unreachable_obj.$field.unwrap()$(.$more_fields.unwrap())*;
+                }
         };
     };
 }

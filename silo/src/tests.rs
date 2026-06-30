@@ -151,9 +151,8 @@ fn test_3_level_deep_nesting_with_option() {
     struct Person {
         address: Option<Address>,
     }
-    // TODO: Fix column_name_of macro!
-    // let c = column_name_of!(Person, address.country.code);
-    // assert_eq!(c, "address_country_code");
+    let c = column_name_of!(Person, address.country.code);
+    assert_eq!(c, "address_country_code");
     let columns: Vec<_> = Person::columns(None, false, false)
         .into_iter()
         .map(|c| c.name)
@@ -212,6 +211,7 @@ fn test_rust_keywords_to_table() {
 }
 
 #[test]
+#[allow(non_camel_case_types)]
 fn test_rust_keywords_as_table_name_to_table() {
     #[derive(Debug, Clone, ToTable)]
     struct r#for {
