@@ -201,7 +201,91 @@ fn test_person_filter() {
         .unwrap();
     assert_eq!(loaded, [alice])
 }
+#[test]
+fn update_person() {
+    let db = Database::create_in_memory().unwrap();
+    let persons = db.load::<Person>().unwrap();
 
+    let id = Uuid::NAMESPACE_OID;
+
+    let original = Person {
+        id,
+        name: "Charlie".into(),
+        age: 42,
+        traditional_name: Some("Charles".into()),
+        residence: AddressTC {
+            city: "Berlin".into(),
+            street: "Second St".into(),
+        },
+    };
+
+    persons.insert(original.clone()).unwrap();
+
+    // Update every mutable field.
+    let updated = persons
+        .update(
+            id,
+            PartialPerson {
+                id: None,
+                name: Some("Chuck".into()),
+                age: Some(43),
+                traditional_name: Some(Some("Carl".into())),
+                residence: PartialAddressTC {
+                    city: Some("Munich".into()),
+                    street: Some("Third St".into()),
+                },
+            },
+        )
+        .unwrap();
+
+    assert_eq!(updated, 1);
+
+    let loaded = persons.load_where(id).unwrap();
+
+    assert_eq!(loaded.len(), 1);
+
+    assert_eq!(
+        loaded[0],
+        Person {
+            id,
+            name: "Chuck".into(),
+            age: 43,
+            traditional_name: Some("Carl".into()),
+            residence: AddressTC {
+                city: "Munich".into(),
+                street: "Third St".into(),
+            },
+        }
+    );
+
+    let count = persons
+        .update(
+            id,
+            PartialPerson {
+                traditional_name: Some(None),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+
+    let loaded = persons.load_where(id).unwrap();
+
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(
+        loaded[0],
+        Person {
+            id,
+            name: "Chuck".into(),
+            age: 43,
+            traditional_name: None,
+            residence: AddressTC {
+                city: "Munich".into(),
+                street: "Third St".into(),
+            },
+        }
+    );
+}
 #[test]
 fn creates_table_for_nested_struct() {
     let db = Database::create_in_memory().unwrap();
