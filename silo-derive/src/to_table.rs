@@ -11,7 +11,6 @@ mod from_row_type;
 mod into_sql_table;
 pub mod partial;
 mod row_type;
-mod to_columns;
 
 pub struct ToTable {
     visibility: Visibility,

@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use quote::{format_ident, quote};
+use syn::{LitStr, ext::IdentExt};
 
 pub(crate) fn create_as_params(
     base_struct: &super::base_struct::StructData,
@@ -19,6 +20,10 @@ pub(crate) fn create_as_params(
         .iter()
         .map(|c| format_ident!("{}", &c.name, span = c.span))
         .collect_vec();
+    let names_str_lit = names.iter().map(|i| {
+        let n = i.unraw();
+        LitStr::new(&n.to_string(), n.span())
+    });
     let as_params = quote! {
             impl silo::AsColumns for #name {
                 const COLUMN_COUNT: usize = 0 #(+ <#column_types as silo::AsColumns>::COLUMN_COUNT)*;
@@ -31,7 +36,7 @@ pub(crate) fn create_as_params(
                     let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
                     let mut result = Vec::with_capacity(<Self as silo::AsColumns>::COLUMN_COUNT);
                     #(
-                        result.append(&mut <#column_types as silo::AsColumnsDynamicallySized>::columns(Some(&format!("{parent}{}", stringify!(#names))), #is_unique, #is_primary));
+                        result.append(&mut <#column_types as silo::AsColumnsDynamicallySized>::columns(Some(&format!("{parent}{}", #names_str_lit)), #is_unique, #is_primary));
                     )*
                     result
                 }

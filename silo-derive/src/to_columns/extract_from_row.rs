@@ -1,6 +1,6 @@
-use crate::to_table;
 use itertools::Itertools;
 use quote::quote;
+use syn::{LitStr, ext::IdentExt};
 
 pub(crate) fn impl_extract_from_row(
     tokens: &mut proc_macro2::TokenStream,
@@ -9,6 +9,10 @@ pub(crate) fn impl_extract_from_row(
     let name = &base_struct.name;
     let fields = base_struct.fields();
     let field_names = fields.iter().map(|f| f.name).collect_vec();
+    let field_names_literals = fields.iter().map(|f| {
+        let n = f.name.unraw();
+        LitStr::new(&n.to_string(), n.span())
+    });
     let field_types = fields.iter().map(|f| f.type_).collect_vec();
     tokens.extend(quote! {
         impl silo::ExtractFromRow for #name {
@@ -17,7 +21,7 @@ pub(crate) fn impl_extract_from_row(
                 let ptr: *mut #name = result.as_mut_ptr();
                 #(
                     unsafe {
-                        (&raw mut (*ptr).#field_names).write(<#field_types>::try_from_row_simple(&format!("{column_name}_{}", stringify!(#field_names)), row)?);
+                        (&raw mut (*ptr).#field_names).write(<#field_types>::try_from_row_simple(&[column_name, concat!("_", #field_names_literals)].concat(), row)?);
                     }
                 )*
                 Ok(unsafe {

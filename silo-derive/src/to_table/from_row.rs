@@ -1,4 +1,5 @@
 use quote::quote;
+use syn::{LitStr, ext::IdentExt};
 
 pub(crate) fn create_from_row_for(
     base_struct: &super::base_struct::StructData,
@@ -40,13 +41,17 @@ fn create_try_from_row_body(
 ) -> proc_macro2::TokenStream {
     let columns = base_struct.columns();
     let column_names: Vec<syn::Ident> = columns.iter().map(|c| c.ident()).collect();
+    let column_names_str_lit = column_names.iter().map(|c| {
+        let n = c.unraw();
+        LitStr::new(&n.to_string(), n.span())
+    });
     let column_types = columns.iter().map(|c| c.type_);
 
     if let Some(variant) = base_struct.variant_field().map(|f| f.name) {
         quote! {todo!("Enums not yet supported!")}
     } else {
         quote! {#(
-            let #column_names = <#column_types as silo::ExtractFromRow>::try_from_row(stringify!(#column_names), row, connection)?;
+            let #column_names = <#column_types as silo::ExtractFromRow>::try_from_row(#column_names_str_lit, row, connection)?;
         )*
         Ok(Self {
             #(#column_names,)*

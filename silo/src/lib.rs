@@ -42,6 +42,18 @@ macro_rules! type_checker {
     };
 }
 
+pub const fn strip_leading_raw_identifier(ident: &str) -> &str {
+    konst::string::trim_start_matches(ident, "r#")
+}
+
+#[macro_export]
+/// Dependency of column_name_of, just calls konst implementation.
+macro_rules! __concat_str_array {
+    ($array:expr) => {
+        konst::string::str_concat!($array)
+    };
+}
+
 #[macro_export]
 /// **Usage example**
 ///
@@ -63,20 +75,13 @@ macro_rules! column_name_of {
     ($t:ty, $f:ident) => {
         {
             silo::type_checker!($t, $f);
-            std::borrow::Cow::Borrowed(stringify!($f))
+            std::borrow::Cow::Borrowed(const {silo::strip_leading_raw_identifier(stringify!($f))})
         }
     };
     ($t:ty, $f:ident $(.$fs:ident)+) => {
         {
             silo::type_checker!($t, $f$(.$fs)+);
-            let n = concat!(
-                stringify!($f),
-                $(
-                    "_",
-                    stringify!($fs),
-                )+
-            );
-            std::borrow::Cow::Borrowed(n)
+            std::borrow::Cow::Borrowed(silo::__concat_str_array!(&[silo::strip_leading_raw_identifier(stringify!($f)), $("_", silo::strip_leading_raw_identifier(stringify!($fs)),)+]))
         }
     }
 }

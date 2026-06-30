@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use quote::quote;
+use syn::{LitStr, ext::IdentExt};
 
 pub(crate) fn create_filter_for(
     base_struct: &super::base_struct::StructData,
@@ -13,6 +14,10 @@ pub(crate) fn create_filter_for(
         .into_iter()
         .map(|f| f.name)
         .collect_vec();
+    let fields_str_lit = fields.iter().map(|f| {
+        let n = f.unraw();
+        LitStr::new(&n.to_string(), n.span())
+    });
     let field_types = base_struct.fields().into_iter().map(|f| f.type_);
     let from_pk = if let Some(pk) = base_struct.primary_key_field() {
         let pk_type = pk.type_;
@@ -49,7 +54,7 @@ pub(crate) fn create_filter_for(
             fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
                 let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
                 #(
-                    self.#fields.to_sql(sql, Some(&format!("{parent}{}", stringify!(#fields))));
+                    self.#fields.to_sql(sql, Some(&format!("{parent}{}", #fields_str_lit)));
                 )*
             }
         }

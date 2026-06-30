@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::parse_quote;
+use syn::{LitStr, ext::IdentExt, parse_quote};
 
 pub(crate) fn create_partial_for(
     base_struct: &super::base_struct::StructData,
@@ -12,6 +12,10 @@ pub(crate) fn create_partial_for(
     let partial_type = create_partial_type_for(base_struct);
     // let variant_field = base_struct.variant_field().map(|f| f.name).into_iter();
     let field_names: Vec<_> = base_struct.fields().into_iter().map(|f| f.name).collect();
+    let field_names_str_lit = field_names.iter().map(|f| {
+        let n = f.unraw();
+        LitStr::new(&n.to_string(), n.span())
+    });
     let is_unique = base_struct
         .columns()
         .into_iter()
@@ -54,7 +58,7 @@ pub(crate) fn create_partial_for(
     ) -> Vec<silo::SqlColumn> {
         let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
                 let mut result = Vec::new();
-                #(result.append(&mut self.#field_names.columns_skip_optional(Some(&format!("{parent}{}", stringify!(#field_names))), #is_unique, #is_primary));)*
+                #(result.append(&mut self.#field_names.columns_skip_optional(Some(&format!("{parent}{}", #field_names_str_lit)), #is_unique, #is_primary));)*
                 result
     }
         }
@@ -80,7 +84,7 @@ pub(crate) fn create_partial_for(
         //         // TODO: Use with_capacity
         //         let mut result = Vec::new();
         //         #(
-        //             result.extend(self.#field_names.used_column_names(Some(column_name.clone().map(|c| format!("{c}_{}", stringify!(#field_names))).unwrap_or_else(|| stringify!(#field_names).to_string()))));
+        //             result.extend(self.#field_names.used_column_names(Some(column_name.clone().map(|c| format!("{c}_{}", #field_names_str_lit)).unwrap_or_else(|| #field_names_str_lit.to_string()))));
         //         )*
         //         result
         //     }
