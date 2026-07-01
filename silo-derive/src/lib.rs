@@ -59,17 +59,20 @@ mod error;
 ///
 /// **#[[silo(skip)]]**
 ///
-/// Any field, which can not be represented in a database, or which you do not want to put into the database you can mark with skip.
+/// Any field, which can not be represented in a database, or which you do not
+/// want to put into the database you can mark with skip.
 ///
 /// ```ignore
 /// #[derive(ToTable)]
-/// struct Person {
+/// struct Person<T> {
 ///     age: usize,
 ///     name: String,
 ///     #[silo(skip)]
 ///     is_senior: bool,
 ///     #[silo(skip)]
 ///     employment_history: JsonValue,
+///     #[silo(skip)]
+///     marker: PhantomMarker<T>,
 /// }
 /// ```
 
