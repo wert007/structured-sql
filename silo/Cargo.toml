@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+default = ["derive"]
 enable_debug_sql = []
+derive = ["dep:silo-derive"]
 
 [dependencies]
 chrono = "0.4.41"
@@ -20,7 +22,7 @@ rusqlite = { version = "0.36.0", features = [
     "chrono",
     "time",
 ] }
-silo-derive = { path = "../silo-derive/" }
+silo-derive = { path = "../silo-derive/", optional = true }
 strum = { version = "0.27.1", features = ["derive"] }
 thiserror = "2.0.18"
 time = "0.3.41"

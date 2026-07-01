@@ -11,14 +11,14 @@ mod into_sql_table;
 pub mod partial;
 mod row_type;
 
-pub struct ToTable {
+pub struct ToTableStruct {
     visibility: Visibility,
     variants: Option<Vec<Ident>>,
     base_struct: base_struct::StructData,
     on_conflict: proc_macro2::TokenStream,
 }
 
-impl std::fmt::Debug for ToTable {
+impl std::fmt::Debug for ToTableStruct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Base")
             .field("variants", &self.variants)
@@ -26,7 +26,7 @@ impl std::fmt::Debug for ToTable {
             .finish()
     }
 }
-impl ToTable {
+impl ToTableStruct {
     pub fn from_struct(
         attrs: Vec<syn::Attribute>,
         name: Ident,
@@ -54,7 +54,7 @@ impl ToTable {
         name: Ident,
         visibility: Visibility,
         data_enum: syn::DataEnum,
-    ) -> Result<ToTable, crate::error::Error> {
+    ) -> Result<ToTableStruct, crate::error::Error> {
         let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs)?;
         let on_conflict = attribute_struct_data.on_conflict();
         let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
@@ -73,7 +73,7 @@ impl ToTable {
     }
 
     fn create_table(&self) -> proc_macro2::TokenStream {
-        let ToTable {
+        let ToTableStruct {
             visibility,
             base_struct,
             ..
@@ -130,7 +130,7 @@ impl ToTable {
     }
 }
 
-impl ToTokens for ToTable {
+impl ToTokens for ToTableStruct {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         // self.create_filter(tokens);
         let table = self.create_table();
