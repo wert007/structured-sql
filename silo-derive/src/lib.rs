@@ -2,9 +2,9 @@ use proc_macro::TokenStream;
 use quote::ToTokens;
 
 mod to_table;
-use to_table::ToTable;
+use to_table::ToTableStruct;
 mod to_columns;
-use to_columns::ToColumns;
+use to_columns::ToColumnsStruct;
 
 mod attributes;
 mod base_struct;
@@ -17,11 +17,21 @@ mod error;
 /// nothing to put into a table.
 ///
 /// ```compile_fail
-///
-/// #[derive(Debug, Clone, silo_derive::ToTable)]
+///# use silo_derive::ToTable;
+/// #[derive(Debug, Clone, ToTable)]
 /// struct EmptyTable {}
-///
-/// #[derive(Debug, Clone, silo_derive::ToColumns)]
+///```
+/// ```compile_fail
+/// # use silo_derive::ToTable;
+/// #[derive(Debug, Clone, ToTable)]
+/// struct AllFieldsSkippedInEmptyTable {
+///     #[silo(skip)]
+///     field: usize,
+/// }
+///```
+/// ```compile_fail
+/// # use silo_derive::ToTable;
+/// #[derive(Debug, Clone, ToColumns)]
 /// struct EmptyColumns {}
 /// ```
 ///
@@ -37,7 +47,8 @@ mod error;
 /// marked as primary, compilation will fail.
 ///
 /// ```compile_fail
-/// #[derive(Debug, Clone, silo_derive::ToTable)]
+/// # use silo_derive::ToTable;
+/// #[derive(Debug, Clone, ToTable)]
 /// struct Person {
 ///     #[silo(primary)]
 ///     id: usize,
@@ -45,6 +56,23 @@ mod error;
 ///     last_name: String
 /// }
 /// ```
+///
+/// **#[[silo(skip)]]**
+///
+/// Any field, which can not be represented in a database, or which you do not want to put into the database you can mark with skip.
+///
+/// ```ignore
+/// #[derive(ToTable)]
+/// struct Person {
+///     age: usize,
+///     name: String,
+///     #[silo(skip)]
+///     is_senior: bool,
+///     #[silo(skip)]
+///     employment_history: JsonValue,
+/// }
+/// ```
+
 pub fn derive_to_table(input: TokenStream) -> TokenStream {
     // syn::Data
     let input: syn::DeriveInput = syn::parse(input)
@@ -52,10 +80,10 @@ pub fn derive_to_table(input: TokenStream) -> TokenStream {
 
     let base = match input.data {
         syn::Data::Struct(data_struct) => {
-            ToTable::from_struct(input.attrs, input.ident, input.vis, data_struct)
+            ToTableStruct::from_struct(input.attrs, input.ident, input.vis, data_struct)
         }
         syn::Data::Enum(data_enum) => {
-            ToTable::from_enum(input.attrs, input.ident, input.vis, data_enum)
+            ToTableStruct::from_enum(input.attrs, input.ident, input.vis, data_enum)
         }
         syn::Data::Union(_) => {
             panic!("Unions need a clear representation, either use a struct or an enum.")
@@ -75,7 +103,7 @@ pub fn derive_to_columns(input: TokenStream) -> TokenStream {
 
     let base = match input.data {
         syn::Data::Struct(data_struct) => {
-            ToColumns::from_struct(input.attrs, input.ident, input.vis, data_struct)
+            ToColumnsStruct::from_struct(input.attrs, input.ident, input.vis, data_struct)
         }
         syn::Data::Enum(_data_enum) => {
             panic!("Enums are currently not supported.")

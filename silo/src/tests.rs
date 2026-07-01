@@ -1,4 +1,4 @@
-use silo_derive::{ToColumns, ToTable};
+use silo::derive::{ToColumns, ToTable};
 use uuid::Uuid;
 
 use crate::{
@@ -6,13 +6,13 @@ use crate::{
     filter::{FieldFilter, Filterable, OptionalFilter},
 };
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, silo::derive::ToColumns)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, ToColumns)]
 struct AddressTC {
     city: String,
     street: String,
 }
 
-#[derive(Default, PartialEq, Eq, Debug, Clone, silo::derive::ToTable)]
+#[derive(Default, PartialEq, Eq, Debug, Clone, ToTable)]
 struct Person {
     name: String,
     age: u8,
@@ -201,6 +201,7 @@ fn test_person_filter() {
         .unwrap();
     assert_eq!(loaded, [alice])
 }
+
 #[test]
 fn update_person() {
     let db = Database::create_in_memory().unwrap();
@@ -683,4 +684,28 @@ fn roundtrip_serialization() {
     let loaded = db.load_where(()).unwrap();
 
     assert_eq!(loaded[0], original);
+}
+
+#[test]
+fn test_skip_attribute() {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct Invalid(u128);
+
+    #[derive(Debug, Clone, ToTable)]
+    struct Entry {
+        name: String,
+        #[silo(skip)]
+        id: Option<Invalid>,
+    }
+
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Entry>().unwrap();
+    db.insert(Entry {
+        name: "Entry name".into(),
+        id: Some(Invalid(123456)),
+    })
+    .unwrap();
+    let loaded = db.load_where(()).unwrap().pop().unwrap();
+    assert_eq!(loaded.name, "Entry name");
+    assert_eq!(loaded.id, None);
 }

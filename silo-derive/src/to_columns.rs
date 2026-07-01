@@ -7,12 +7,12 @@ mod extract_from_row;
 mod filterable;
 mod partial;
 
-pub struct ToColumns {
+pub struct ToColumnsStruct {
     visibility: Visibility,
     base_struct: base_struct::StructData,
 }
 
-impl ToColumns {
+impl ToColumnsStruct {
     pub fn from_struct(
         _attrs: Vec<syn::Attribute>,
         name: Ident,
@@ -34,7 +34,7 @@ impl ToColumns {
     }
 }
 
-impl ToTokens for ToColumns {
+impl ToTokens for ToColumnsStruct {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         partial::impl_to_partial(tokens, &self.base_struct);
         filterable::impl_filterable(tokens, &self.base_struct);
