@@ -709,3 +709,25 @@ fn test_skip_attribute() {
     assert_eq!(loaded.name, "Entry name");
     assert_eq!(loaded.id, None);
 }
+
+#[test]
+fn test_default_attribute() {
+    #[derive(Debug, Clone, ToTable)]
+    struct Entry {
+        name: String,
+        #[silo(default = 12345)]
+        #[silo(skip)]
+        value: usize,
+    }
+
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Entry>().unwrap();
+    db.insert(Entry {
+        name: "Entry name".into(),
+        value: 0,
+    })
+    .unwrap();
+    let loaded = db.load_where(()).unwrap().pop().unwrap();
+    assert_eq!(loaded.name, "Entry name");
+    assert_eq!(loaded.value, 12345);
+}

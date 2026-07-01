@@ -46,12 +46,24 @@ fn create_try_from_row_body(
         LitStr::new(&n.to_string(), n.span())
     });
     let column_types = columns.iter().map(|c| c.type_);
+    let column_default_values = columns.iter().map(|c| {
+        let n = c.ident();
+        c.default_value
+            .as_ref()
+            .map(|d| {
+                quote! {
+                    let #n = #n.or(#d);
+                }
+            })
+            .unwrap_or_default()
+    });
 
     if let Some(_variant) = base_struct.variant_field().map(|f| f.name) {
         quote! {todo!("Enums not yet supported!")}
     } else {
         quote! {#(
             let #column_names = <#column_types as silo::ExtractFromRow>::try_from_row(#column_names_str_lit, row, connection)?;
+            #column_default_values
         )*
         Ok(Self {
             #(#column_names,)*

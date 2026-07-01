@@ -179,7 +179,16 @@ fn create_partial_type_for(
         }
     } else {
         let field_names: Vec<_> = base_struct.fields().into_iter().map(|f| f.name).collect();
-        let skipped_field_names = base_struct.skipped_fields().into_iter().map(|f| f.name);
+        let skipped_fields = base_struct.skipped_fields().into_iter().map(|f| {
+            let initializer = f
+                .default
+                .cloned()
+                .unwrap_or_else(|| parse_quote!(Default::default()));
+            let n = f.name;
+            quote! {
+                #n: #initializer,
+            }
+        });
         quote! {
             impl silo::partial::PartialType<#name> for #partial_name {
                 fn transpose(self) -> Option<#name> {
@@ -187,7 +196,7 @@ fn create_partial_type_for(
                     #(let #field_names = self.#field_names.transpose()?;)*
                     Some(#name {
                         #(#field_names,)*
-                        #(#skipped_field_names: Default::default(),)*
+                        #(#skipped_fields)*
                     })
                 }
             }
