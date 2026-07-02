@@ -2,18 +2,20 @@ use crate::attributes::AttributeFieldData;
 use crate::error::Error;
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, format_ident, quote};
-use syn::{Ident, Type, Visibility, spanned::Spanned};
+use syn::{Ident, Type, Visibility, parse_quote, spanned::Spanned};
 
 #[derive(Clone, Copy)]
 pub struct Field<'a> {
     pub name: &'a Ident,
     pub type_: &'a Type,
+    pub default: Option<&'a syn::Expr>,
 }
 impl Field<'_> {
     pub(crate) fn map_type(self, f: impl Fn(&Type) -> &Type) -> Self {
         Self {
             name: self.name,
             type_: f(self.type_),
+            default: self.default,
         }
     }
 }
@@ -37,6 +39,7 @@ pub struct Member {
     is_skipped: bool,
     is_remaining_element: bool,
     is_unnamed: bool,
+    default: Option<syn::Expr>,
 }
 
 impl std::fmt::Debug for Member {
@@ -64,6 +67,7 @@ impl Member {
             is_skipped: self.is_skipped,
             is_remaining_element: self.is_remaining_element,
             is_unnamed: self.is_unnamed,
+            default: self.default.map(|d| parse_quote! { Some(#d) }),
         }
     }
 
@@ -88,6 +92,7 @@ impl Member {
             is_skipped: a.is_skip,
             is_remaining_element: false,
             is_unnamed: name_is_generated,
+            default: a.default.clone(),
         }
     }
 
@@ -105,6 +110,7 @@ impl Member {
             is_skipped: false,
             is_remaining_element: false,
             is_unnamed: false,
+            default: None,
         }
     }
 
@@ -112,6 +118,7 @@ impl Member {
         Field {
             name: &self.name,
             type_: &self.type_,
+            default: self.default.as_ref(),
         }
     }
 
@@ -122,6 +129,7 @@ impl Member {
             type_: &self.type_,
             is_unique: self.is_unique,
             is_primary: self.is_primary,
+            default_value: self.default.clone(),
         }
     }
 }
@@ -133,6 +141,7 @@ pub struct ColumnData<'a> {
     pub type_: &'a Type,
     pub is_unique: bool,
     pub is_primary: bool,
+    pub default_value: Option<syn::Expr>,
 }
 impl ColumnData<'_> {
     pub(crate) fn ident(&self) -> syn::Ident {

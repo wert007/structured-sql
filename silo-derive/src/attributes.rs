@@ -6,11 +6,20 @@ use crate::error::{Error, ErrorKind};
 
 pub enum StructuredAttributeArguments {
     Identifier(String),
+    IdentifierExpression(String, syn::Expr),
 }
 impl StructuredAttributeArguments {
     fn new(argument: syn::Expr) -> Option<Self> {
         match argument {
             syn::Expr::Path(path) => Some(Self::Identifier(path.path.get_ident()?.to_string())),
+            syn::Expr::Assign(assign) => {
+                let syn::Expr::Path(name) = *assign.left else {
+                    return None;
+                };
+                let name = name.path.get_ident()?.to_string();
+                let expr = *assign.right;
+                Some(Self::IdentifierExpression(name, expr))
+            }
             _ => None,
         }
     }
@@ -69,6 +78,9 @@ impl ToTableAttributesStruct {
                         panic!("Invalid attribute");
                     }
                 },
+                StructuredAttributeArguments::IdentifierExpression(..) => {
+                    panic!("No = in attributes allowed here!");
+                }
             }
         }
 
@@ -94,11 +106,23 @@ impl ToTableAttributesStruct {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct AttributeFieldData {
     pub is_primary: bool,
     pub is_unique: bool,
     pub is_skip: bool,
+    pub default: Option<syn::Expr>,
+}
+
+impl std::fmt::Debug for AttributeFieldData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AttributeFieldData")
+            .field("is_primary", &self.is_primary)
+            .field("is_unique", &self.is_unique)
+            .field("is_skip", &self.is_skip)
+            .field("default", &self.default.is_some())
+            .finish()
+    }
 }
 
 impl AttributeFieldData {
@@ -106,7 +130,7 @@ impl AttributeFieldData {
         let mut this = Self::default();
         for attribute in attrs {
             let Some(attribute) = StructuredAttribute::new(attribute) else {
-                panic!("Invalid attribute");
+                panic!("Invalid attribute is not formatted right (sadly)");
             };
             if attribute.path != "silo" {
                 panic!("Invalid attribute");
@@ -116,10 +140,20 @@ impl AttributeFieldData {
                     "primary" => this.is_primary = true,
                     "unique" => this.is_unique = true,
                     "skip" => this.is_skip = true,
-                    _ => {
-                        panic!("Invalid attribute");
+                    name => {
+                        panic!("Invalid attribute: {name}");
                     }
                 },
+                StructuredAttributeArguments::IdentifierExpression(name, expr) => {
+                    match name.as_str() {
+                        "default" => {
+                            this.default = Some(expr);
+                        }
+                        name => {
+                            panic!("Invalid assignment attribute: {name}");
+                        }
+                    }
+                }
             }
         }
         this
