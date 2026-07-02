@@ -3,12 +3,13 @@ use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
 use syn::{Attribute, spanned::Spanned};
 
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 
 pub enum StructuredAttributeArguments {
     Identifier(String),
     IdentifierExpression(String, syn::Expr),
 }
+
 impl StructuredAttributeArguments {
     fn new(meta: syn::Meta) -> Vec<Self> {
         match meta {
@@ -82,13 +83,12 @@ impl ToTableAttributesStruct {
         let mut this = Self::default();
         for attribute in attrs {
             let Some(attribute) = StructuredAttribute::new(attribute) else {
-                panic!("Invalid attribute");
+                // This is not intended for us.
+                continue;
             };
             if attribute.path != "silo" {
-                return Err(Error::new(
-                    attribute.span,
-                    ErrorKind::InvalidAttribute(attribute.path),
-                ));
+                // This is not intended for us.
+                continue;
             }
             for attribute in attribute.arguments {
                 match attribute {
@@ -156,10 +156,12 @@ impl AttributeFieldData {
         let mut this = Self::default();
         for attribute in attrs {
             let Some(attribute) = StructuredAttribute::new(attribute) else {
-                panic!("Invalid attribute is not formatted right (sadly)");
+                // This is not intended for us.
+                continue;
             };
             if attribute.path != "silo" {
-                panic!("Invalid attribute");
+                // This is not intended for us.
+                continue;
             }
             for attribute in attribute.arguments {
                 match attribute {
