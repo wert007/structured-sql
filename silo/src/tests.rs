@@ -715,8 +715,7 @@ fn test_default_attribute() {
     #[derive(Debug, Clone, ToTable)]
     struct Entry {
         name: String,
-        #[silo(default = 12345)]
-        #[silo(skip)]
+        #[silo(skip, default = 12345)]
         value: usize,
     }
 

@@ -1,4 +1,5 @@
-use proc_macro2::Span;
+use itertools::Itertools;
+use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
 use syn::{Attribute, spanned::Spanned};
 
@@ -9,18 +10,41 @@ pub enum StructuredAttributeArguments {
     IdentifierExpression(String, syn::Expr),
 }
 impl StructuredAttributeArguments {
-    fn new(argument: syn::Expr) -> Option<Self> {
-        match argument {
-            syn::Expr::Path(path) => Some(Self::Identifier(path.path.get_ident()?.to_string())),
-            syn::Expr::Assign(assign) => {
-                let syn::Expr::Path(name) = *assign.left else {
-                    return None;
+    fn new(meta: syn::Meta) -> Vec<Self> {
+        match meta {
+            syn::Meta::Path(path) => {
+                let Some(ident) = path.get_ident() else {
+                    return Vec::new();
                 };
-                let name = name.path.get_ident()?.to_string();
-                let expr = *assign.right;
-                Some(Self::IdentifierExpression(name, expr))
+                vec![Self::Identifier(ident.to_string())]
             }
-            _ => None,
+            syn::Meta::List(meta_list) => {
+                let tokens = meta_list.tokens.into_iter().collect_vec();
+                let arguments = tokens
+                    .split(|t| matches!(t, TokenTree::Punct(p) if p.as_char() == ','))
+                    .map(|t| {
+                        let mut ts = TokenStream::new();
+                        ts.extend(t.into_iter().cloned());
+                        ts
+                    })
+                    .collect_vec();
+                let mut result = Vec::new();
+                for argument in arguments {
+                    let Ok(expr) = syn::parse2::<syn::Meta>(argument) else {
+                        continue;
+                    };
+                    result.append(&mut Self::new(expr));
+                }
+                result
+            }
+            syn::Meta::NameValue(meta_name_value) => {
+                let Some(name) = meta_name_value.path.get_ident() else {
+                    return Vec::new();
+                };
+                let name = name.to_string();
+                let expr = meta_name_value.value;
+                vec![Self::IdentifierExpression(name, expr)]
+            }
         }
     }
 }
@@ -28,12 +52,12 @@ impl StructuredAttributeArguments {
 pub struct StructuredAttribute {
     span: Span,
     path: String,
-    arguments: StructuredAttributeArguments,
+    arguments: Vec<StructuredAttributeArguments>,
 }
 impl StructuredAttribute {
     fn new(attribute: &Attribute) -> Option<Self> {
         let path = attribute.path().get_ident()?.to_string();
-        let arguments = StructuredAttributeArguments::new(attribute.parse_args().ok()?)?;
+        let arguments = StructuredAttributeArguments::new(attribute.meta.clone());
         let span = attribute.span();
         Some(Self {
             path,
@@ -66,20 +90,22 @@ impl ToTableAttributesStruct {
                     ErrorKind::InvalidAttribute(attribute.path),
                 ));
             }
-            match attribute.arguments {
-                StructuredAttributeArguments::Identifier(name) => match name.as_str() {
-                    "rollback" => this.on_conflict_rollback = true,
-                    "abort" => this.on_conflict_abort = true,
-                    "fail" => this.on_conflict_fail = true,
-                    "ignore" => this.on_conflict_ignore = true,
-                    "replace" => this.on_conflict_replace = true,
-                    "migrate" => this.has_custom_migration_handler = true,
-                    _ => {
-                        panic!("Invalid attribute");
+            for attribute in attribute.arguments {
+                match attribute {
+                    StructuredAttributeArguments::Identifier(name) => match name.as_str() {
+                        "rollback" => this.on_conflict_rollback = true,
+                        "abort" => this.on_conflict_abort = true,
+                        "fail" => this.on_conflict_fail = true,
+                        "ignore" => this.on_conflict_ignore = true,
+                        "replace" => this.on_conflict_replace = true,
+                        "migrate" => this.has_custom_migration_handler = true,
+                        _ => {
+                            panic!("Invalid attribute");
+                        }
+                    },
+                    StructuredAttributeArguments::IdentifierExpression(..) => {
+                        panic!("No = in attributes allowed here!");
                     }
-                },
-                StructuredAttributeArguments::IdentifierExpression(..) => {
-                    panic!("No = in attributes allowed here!");
                 }
             }
         }
@@ -135,22 +161,24 @@ impl AttributeFieldData {
             if attribute.path != "silo" {
                 panic!("Invalid attribute");
             }
-            match attribute.arguments {
-                StructuredAttributeArguments::Identifier(name) => match name.as_str() {
-                    "primary" => this.is_primary = true,
-                    "unique" => this.is_unique = true,
-                    "skip" => this.is_skip = true,
-                    name => {
-                        panic!("Invalid attribute: {name}");
-                    }
-                },
-                StructuredAttributeArguments::IdentifierExpression(name, expr) => {
-                    match name.as_str() {
-                        "default" => {
-                            this.default = Some(expr);
-                        }
+            for attribute in attribute.arguments {
+                match attribute {
+                    StructuredAttributeArguments::Identifier(name) => match name.as_str() {
+                        "primary" => this.is_primary = true,
+                        "unique" => this.is_unique = true,
+                        "skip" => this.is_skip = true,
                         name => {
-                            panic!("Invalid assignment attribute: {name}");
+                            panic!("Invalid attribute: {name}");
+                        }
+                    },
+                    StructuredAttributeArguments::IdentifierExpression(name, expr) => {
+                        match name.as_str() {
+                            "default" => {
+                                this.default = Some(expr);
+                            }
+                            name => {
+                                panic!("Invalid assignment attribute: {name}");
+                            }
                         }
                     }
                 }
