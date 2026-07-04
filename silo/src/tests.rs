@@ -761,3 +761,27 @@ fn file_test_versioning_and_migrating() {
     step1(&db);
     step2(&db);
 }
+
+#[test]
+fn simple_enum() {
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    enum Fruit {
+        Apple,
+        Pineapple,
+        Banana,
+    }
+
+    #[derive(Debug, Clone, ToTable, PartialEq)]
+    struct Cake {
+        fruit: Fruit,
+    }
+
+    let db = Database::create_in_memory().unwrap();
+    let cake = db.load::<Cake>().unwrap();
+    let insert = Cake {
+        fruit: Fruit::Pineapple,
+    };
+    cake.insert(insert.clone()).unwrap();
+    let cakes = cake.load_where(()).unwrap();
+    assert_eq!(insert, cakes[0]);
+}

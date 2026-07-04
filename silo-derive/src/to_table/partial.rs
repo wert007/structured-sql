@@ -6,6 +6,9 @@ pub(crate) fn create_partial_for(
     base_struct: &super::base_struct::StructData,
     tokens: &mut proc_macro2::TokenStream,
 ) {
+    if base_struct.is_simple_enum() {
+        return;
+    }
     let visibility = &base_struct.visibility;
     let name = &base_struct.name;
     let partial_name = base_struct.partial_name();

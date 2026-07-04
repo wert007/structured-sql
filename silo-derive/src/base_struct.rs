@@ -371,6 +371,14 @@ impl StructData {
             .find(|m| m.is_primary)
             .map(|m| m.to_field())
     }
+
+    pub fn is_enum(&self) -> bool {
+        !self.variants.is_empty()
+    }
+
+    pub(crate) fn is_simple_enum(&self) -> bool {
+        !self.variants.is_empty() && self.variants.iter().all(|v| v.fields.is_empty())
+    }
 }
 
 impl ToTokens for StructData {

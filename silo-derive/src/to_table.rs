@@ -118,7 +118,7 @@ impl ToTableStruct {
     fn create_conversions(&self, tokens: &mut proc_macro2::TokenStream) {
         from_row::create_from_row_for(&self.base_struct, tokens);
         partial::create_partial_for(&self.base_struct, tokens);
-        as_params::create_as_params(&self.base_struct, tokens, true);
+        as_params::create_as_params_for_struct(&self.base_struct, tokens, true);
     }
 
     fn create_into_sql_table(&self) -> proc_macro2::TokenStream {
