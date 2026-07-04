@@ -730,3 +730,34 @@ fn test_default_attribute() {
     assert_eq!(loaded.name, "Entry name");
     assert_eq!(loaded.value, 12345);
 }
+
+#[test]
+fn file_test_versioning_and_migrating() {
+    let db = Database::create_in_memory().unwrap();
+    fn step1(db: &Database) {
+        #[derive(Debug, Clone, ToTable)]
+        struct Person {
+            name: String,
+        }
+
+        let p = db.load::<Person>().unwrap();
+        p.insert(Person {
+            name: "Peter Pane".into(),
+        })
+        .unwrap();
+    }
+    fn step2(db: &Database) {
+        #[derive(Debug, Clone, ToTable)]
+        struct Person {
+            name: String,
+            #[silo(default = 42)]
+            age: u8,
+        }
+        let p = db.load::<Person>().unwrap();
+        let persons = p.load_where(()).unwrap();
+        assert_eq!(persons[0].name, "Peter Pane");
+        assert_eq!(persons[0].age, 42);
+    }
+    step1(&db);
+    step2(&db);
+}
