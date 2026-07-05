@@ -17,6 +17,8 @@ pub enum ErrorKind {
     MultipleConflictAttributes,
     InvalidAttribute(String),
     NoColumns,
+    InvalidArgumentToAttributeForRename,
+    ArgumentToAttributeMustBeStringLiteral,
 }
 
 impl Display for ErrorKind {
@@ -35,6 +37,13 @@ impl Display for ErrorKind {
             }
             ErrorKind::NoColumns => {
                 write!(f, "No columns on this struct, nothing to put into a table.")
+            }
+            ErrorKind::InvalidArgumentToAttributeForRename => write!(
+                f,
+                "Invalid case name, expected one of \"kebab-case\", \"snake_case\", \"camelCase\", \"PascalCase\", \"UPPER-KEBAB-CASE\", or \"UPPER_SNAKE_CASE\"."
+            ),
+            ErrorKind::ArgumentToAttributeMustBeStringLiteral => {
+                write!(f, "Argument to attribute must be a \"string literal\".")
             }
         }
     }

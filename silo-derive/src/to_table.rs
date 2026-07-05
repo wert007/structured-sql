@@ -55,21 +55,23 @@ impl ToTableStruct {
         visibility: Visibility,
         data_enum: syn::DataEnum,
     ) -> Result<ToTableStruct, crate::error::Error> {
-        let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs)?;
-        let on_conflict = attribute_struct_data.on_conflict();
-        let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
-        let base_struct: base_struct::StructData = base_struct::StructData::from_enum_data(
-            visibility.clone(),
-            name.clone(),
-            data_enum.variants,
-        )?;
+        todo!()
+        // let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs)?;
+        // let on_conflict = attribute_struct_data.on_conflict();
+        // let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
+        // let base_struct: base_struct::StructData = base_struct::StructData::from_enum_data(
+        //     visibility.clone(),
+        //     name.clone(),
+        //     data_enum.variants,
+        //     a
+        // )?;
 
-        Ok(Self {
-            visibility,
-            variants: Some(variants),
-            on_conflict,
-            base_struct,
-        })
+        // Ok(Self {
+        //     visibility,
+        //     variants: Some(variants),
+        //     on_conflict,
+        //     base_struct,
+        // })
     }
 
     fn create_table(&self) -> proc_macro2::TokenStream {
@@ -118,7 +120,7 @@ impl ToTableStruct {
     fn create_conversions(&self, tokens: &mut proc_macro2::TokenStream) {
         from_row::create_from_row_for(&self.base_struct, tokens);
         partial::create_partial_for(&self.base_struct, tokens);
-        as_params::create_as_params(&self.base_struct, tokens, true);
+        as_params::create_as_params_for_struct(&self.base_struct, tokens, true);
     }
 
     fn create_into_sql_table(&self) -> proc_macro2::TokenStream {

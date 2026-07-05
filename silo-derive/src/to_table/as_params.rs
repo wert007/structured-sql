@@ -2,7 +2,7 @@ use itertools::Itertools;
 use quote::{format_ident, quote};
 use syn::{LitStr, ext::IdentExt};
 
-pub(crate) fn create_as_params(
+pub(crate) fn create_as_params_for_struct(
     base_struct: &super::base_struct::StructData,
     tokens: &mut proc_macro2::TokenStream,
     _for_table: bool,

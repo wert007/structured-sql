@@ -12,6 +12,8 @@ pub enum Error {
     CouldNotMigrate(Cow<'static, str>),
     #[error("Todo: {0}")]
     Todo(String),
+    #[error("There is no variant named {0} on enum {1}")]
+    UnknownEnumVariant(String, &'static str),
     #[error("IllFormattedColumn: {1} cannot be parsed into {0}: {2:?}")]
     IllFormattedColumn(
         Cow<'static, str>,

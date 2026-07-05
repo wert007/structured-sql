@@ -2,6 +2,7 @@ use proc_macro::TokenStream;
 use quote::ToTokens;
 
 mod to_table;
+use syn::ext::IdentExt;
 use to_table::ToTableStruct;
 mod to_columns;
 use to_columns::ToColumnsStruct;
@@ -108,8 +109,8 @@ pub fn derive_to_columns(input: TokenStream) -> TokenStream {
         syn::Data::Struct(data_struct) => {
             ToColumnsStruct::from_struct(input.attrs, input.ident, input.vis, data_struct)
         }
-        syn::Data::Enum(_data_enum) => {
-            panic!("Enums are currently not supported.")
+        syn::Data::Enum(data_enum) => {
+            ToColumnsStruct::from_enum(input.attrs, input.ident, input.vis, data_enum)
         }
         syn::Data::Union(_) => {
             panic!("Unions need a clear representation, either use a struct or an enum.")
@@ -121,26 +122,14 @@ pub fn derive_to_columns(input: TokenStream) -> TokenStream {
     }
 }
 
-// #[macro_export]
-// #[proc_macro_derive(ToRows, attributes(silo))]
-// pub fn derive_to_rows(input: TokenStream) -> TokenStream {
-//     // syn::Data
-//     let input: syn::DeriveInput = syn::parse(input)
-//         .expect("This is a derive macro and should be used with structs or enums.");
+trait ToLitStr {
+    fn to_lit_str(&self) -> syn::LitStr;
+}
 
-//     let base = match input.data {
-//         syn::Data::Struct(data_struct) => {
-//             ToRows::from_struct(input.attrs, input.ident, input.vis, data_struct)
-//         }
-//         syn::Data::Enum(data_enum) => {
-//             ToRows::from_enum(input.attrs, input.ident, input.vis, data_enum)
-//         }
-//         syn::Data::Union(_) => {
-//             panic!("Unions need a clear representation, either use a struct or an enum.")
-//         }
-//     };
-//     match base {
-//         Ok(it) => it.into_token_stream().into(),
-//         Err(it) => it.into_token_stream().into(),
-//     }
-// }
+impl ToLitStr for syn::Ident {
+    fn to_lit_str(&self) -> syn::LitStr {
+        let span = self.span();
+        let value = self.unraw().to_string();
+        syn::LitStr::new(&value, span)
+    }
+}
