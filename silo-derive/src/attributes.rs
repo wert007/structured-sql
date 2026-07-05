@@ -1,3 +1,4 @@
+use convert_case::Case;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
@@ -65,6 +66,76 @@ impl StructuredAttribute {
             arguments,
             span,
         })
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ToColumnsAttributesEnum {
+    pub rename: Option<Case<'static>>,
+}
+
+impl ToColumnsAttributesEnum {
+    pub fn parse(attrs: &[Attribute]) -> Result<ToColumnsAttributesEnum, Error> {
+        let mut this: ToColumnsAttributesEnum = Self::default();
+        for attribute in attrs {
+            let span = attribute.span();
+            let Some(attribute) = StructuredAttribute::new(attribute) else {
+                // This is not intended for us.
+                continue;
+            };
+            if attribute.path != "silo" {
+                // This is not intended for us.
+                continue;
+            }
+            for attribute in attribute.arguments {
+                match attribute {
+                    StructuredAttributeArguments::Identifier(ident) => {
+                        return Err(Error::new(
+                            span,
+                            crate::error::ErrorKind::InvalidAttribute(ident),
+                        ));
+                    }
+                    StructuredAttributeArguments::IdentifierExpression(name, expr) => {
+                        match name.as_str() {
+                            "rename" => {
+                                this.rename = Some(convert_expr_to_case_naming(expr)?);
+                            }
+                            _ => {
+                                return Err(Error::new(
+                                    span,
+                                    crate::error::ErrorKind::InvalidAttribute(name),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(this)
+    }
+}
+
+fn convert_expr_to_case_naming(expr: syn::Expr) -> Result<Case<'static>, Error> {
+    match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(lit),
+            ..
+        }) => match lit.value().as_str() {
+            "kebab-case" => Ok(Case::Kebab),
+            "PascalCase" => Ok(Case::Pascal),
+            "camelCase" => Ok(Case::Camel),
+            "snake_case" => Ok(Case::Snake),
+            "UPPER-KEBAB-CASE" => Ok(Case::UpperKebab),
+            "UPPER_SNAKE_CASE" => Ok(Case::UpperSnake),
+            _ => Err(Error::new(
+                lit.span(),
+                crate::error::ErrorKind::InvalidArgumentToAttributeForRename,
+            )),
+        },
+        _ => Err(Error::new(
+            expr.span(),
+            crate::error::ErrorKind::ArgumentToAttributeMustBeStringLiteral,
+        )),
     }
 }
 

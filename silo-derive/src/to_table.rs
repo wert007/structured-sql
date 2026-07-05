@@ -55,21 +55,23 @@ impl ToTableStruct {
         visibility: Visibility,
         data_enum: syn::DataEnum,
     ) -> Result<ToTableStruct, crate::error::Error> {
-        let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs)?;
-        let on_conflict = attribute_struct_data.on_conflict();
-        let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
-        let base_struct: base_struct::StructData = base_struct::StructData::from_enum_data(
-            visibility.clone(),
-            name.clone(),
-            data_enum.variants,
-        )?;
+        todo!()
+        // let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs)?;
+        // let on_conflict = attribute_struct_data.on_conflict();
+        // let variants = data_enum.variants.iter().map(|v| v.ident.clone()).collect();
+        // let base_struct: base_struct::StructData = base_struct::StructData::from_enum_data(
+        //     visibility.clone(),
+        //     name.clone(),
+        //     data_enum.variants,
+        //     a
+        // )?;
 
-        Ok(Self {
-            visibility,
-            variants: Some(variants),
-            on_conflict,
-            base_struct,
-        })
+        // Ok(Self {
+        //     visibility,
+        //     variants: Some(variants),
+        //     on_conflict,
+        //     base_struct,
+        // })
     }
 
     fn create_table(&self) -> proc_macro2::TokenStream {

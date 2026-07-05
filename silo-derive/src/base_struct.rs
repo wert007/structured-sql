@@ -1,7 +1,10 @@
 use crate::attributes::AttributeFieldData;
+use crate::attributes::ToColumnsAttributesEnum;
 use crate::error::Error;
+use convert_case::{Case, Casing};
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, format_ident, quote};
+use syn::ext::IdentExt;
 use syn::{Ident, Type, Visibility, parse_quote, spanned::Spanned};
 
 #[derive(Clone, Copy)]
@@ -211,6 +214,7 @@ impl VariantData {
 pub struct StructData {
     pub visibility: Visibility,
     pub name: Ident,
+    pub rename_variants: Case<'static>,
     members: Vec<Member>,
     skipped_members: Vec<Member>,
     variant_member: Option<Member>,
@@ -248,6 +252,7 @@ impl StructData {
             original_name: name.clone(),
             name,
             members: Vec::new(),
+            rename_variants: Case::Snake,
             variant_member: None,
             skipped_members: Vec::new(),
             variants: Vec::new(),
@@ -273,7 +278,9 @@ impl StructData {
         visibility: Visibility,
         name: Ident,
         variants: syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
+        attrs: ToColumnsAttributesEnum,
     ) -> Result<StructData, Error> {
+        let rename_variants = attrs.rename.unwrap_or(Case::Snake);
         let fields = variants
             .iter()
             .flat_map(|v| v.fields.iter())
@@ -291,6 +298,7 @@ impl StructData {
         let mut this = Self {
             variants,
             original_name: name.clone(),
+            rename_variants,
             variant_member: Some(Member::create_variant_member(name.span())),
             visibility,
             name,
@@ -350,6 +358,7 @@ impl StructData {
                 .cloned()
                 .map(Member::to_partial)
                 .collect(),
+            rename_variants: self.rename_variants,
             variant_member: self.variant_member.clone().map(Member::to_partial),
             variants: self.variants.clone(),
             is_row_type: self.is_row_type,
@@ -378,6 +387,20 @@ impl StructData {
 
     pub(crate) fn is_simple_enum(&self) -> bool {
         !self.variants.is_empty() && self.variants.iter().all(|v| v.fields.is_empty())
+    }
+
+    pub(crate) fn discriminant_values(&self) -> Vec<syn::Expr> {
+        self.variants
+            .iter()
+            .map(|v| {
+                let ident = v.name.unraw().to_string();
+                let lit = ident.to_case(self.rename_variants);
+                syn::Expr::Lit(syn::ExprLit {
+                    attrs: Vec::new(),
+                    lit: syn::Lit::Str(syn::LitStr::new(&lit, v.name.span())),
+                })
+            })
+            .collect()
     }
 }
 

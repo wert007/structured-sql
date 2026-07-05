@@ -23,12 +23,13 @@ fn impl_extract_from_row_for_simple_enum(
 ) {
     let name = &base_struct.name;
     let variants = base_struct.variant_patterns();
+    let discriminant_values = base_struct.discriminant_values();
     tokens.extend(quote! {
         impl silo::ExtractFromRow for #name {
             fn try_from_row_simple(column_name: &str, row: &silo::rusqlite::Row) -> Result<Self, silo::Error> {
                 match row.get::<&str, String>(column_name) {
                     Ok(it) => match it.as_str() {
-                        #(stringify!(#variants) => Ok(#variants),)*
+                        #(#discriminant_values => Ok(#variants),)*
                         err => Err(silo::Error::UnknownEnumVariant(err.to_string(), stringify!(#name))),
                     },
                     Err(silo::rusqlite::Error::InvalidColumnName(_)) => {

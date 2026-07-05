@@ -765,9 +765,10 @@ fn file_test_versioning_and_migrating() {
 #[test]
 fn simple_enum() {
     #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "kebab-case")]
     enum Fruit {
         Apple,
-        Pineapple,
+        PineApple,
         Banana,
     }
 
@@ -779,9 +780,15 @@ fn simple_enum() {
     let db = Database::create_in_memory().unwrap();
     let cake = db.load::<Cake>().unwrap();
     let insert = Cake {
-        fruit: Fruit::Pineapple,
+        fruit: Fruit::PineApple,
     };
     cake.insert(insert.clone()).unwrap();
-    let cakes = cake.load_where(()).unwrap();
+    let cakes = cake
+        .load_where(CakeFilter {
+            fruit: Fruit::PineApple.convert_to_equals_filter(),
+        })
+        .unwrap();
     assert_eq!(insert, cakes[0]);
+    let v: Vec<String> = cake.project("fruit", ()).unwrap();
+    assert_eq!(v[0], "pine-apple");
 }

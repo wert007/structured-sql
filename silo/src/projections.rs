@@ -28,6 +28,12 @@ impl From<Cow<'static, str>> for ProjectionColumns {
     }
 }
 
+impl From<&'static str> for ProjectionColumns {
+    fn from(value: &'static str) -> Self {
+        Self(vec![value.into()])
+    }
+}
+
 impl<const N: usize> From<[Cow<'static, str>; N]> for ProjectionColumns {
     fn from(value: [Cow<'static, str>; N]) -> Self {
         Self(value.into())

@@ -19,6 +19,7 @@ fn impl_filterable_for_simple_enum(
 ) {
     let name = &base_struct.name;
     let variants = base_struct.variant_patterns();
+    let discriminant_values = base_struct.discriminant_values();
     tokens.extend(quote! {
 
         impl silo::filter::Filterable for #name {
@@ -26,7 +27,7 @@ fn impl_filterable_for_simple_enum(
 
             fn convert_to_equals_filter(self) -> Self::Filter {
                 match self {
-                    #(#variants => stringify!(#variants).to_string().convert_to_equals_filter(),)*
+                    #(#variants => #discriminant_values.to_string().convert_to_equals_filter(),)*
                 }
             }
         }
