@@ -1,5 +1,6 @@
+use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, quote};
-use syn::{Ident, Visibility};
+use syn::{Generics, Ident, Lifetime, LifetimeParam, Visibility};
 
 use crate::{attributes, base_struct};
 
@@ -31,14 +32,15 @@ impl ToTableStruct {
         attrs: Vec<syn::Attribute>,
         name: Ident,
         visibility: Visibility,
+        generics: Generics,
         data_struct: syn::DataStruct,
     ) -> Result<Self, crate::error::Error> {
         let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs)?;
         let on_conflict = attribute_struct_data.on_conflict();
-
         let base_struct: base_struct::StructData = base_struct::StructData::from_struct_data(
             visibility.clone(),
             name.clone(),
+            generics,
             data_struct.fields,
         )?;
         Ok(Self {
@@ -84,18 +86,35 @@ impl ToTableStruct {
         let value_type_name = &base_struct.name;
         let filter_name = base_struct.filter_name();
         let partial_name = base_struct.partial_name();
+        let b = base_struct.generics_names_only(TokenStream::new());
+        let ab = base_struct.generics_names_only(quote! {'__silo__a,});
+        let mut a = base_struct.generics.clone();
+        a.params.insert(
+            0,
+            syn::GenericParam::Lifetime(LifetimeParam::new(Lifetime::new(
+                "'__silo__a",
+                Span::call_site(),
+            ))),
+        );
+        let c = &base_struct.where_clause;
+        let marker = if base_struct.generics.params.is_empty() {
+            quote! {()}
+        } else {
+            quote! { std::marker::PhantomData #b }
+        };
 
         quote! {
-            #visibility struct #table_name<'a> {
-                connection: &'a silo::rusqlite::Connection,
+            #visibility struct #table_name #a #c {
+                connection: &'__silo__a silo::rusqlite::Connection,
+                _marker: #marker,
             }
 
-            impl<'a> silo::SqlTable<'a> for #table_name<'a> {
-                type RowType = #value_type_name;
-                type ValueType = #value_type_name;
-                type FilterType = #filter_name;
+            impl #a silo::SqlTable<'__silo__a> for #table_name #ab #c {
+                type RowType = #value_type_name #b;
+                type ValueType = #value_type_name #b;
+                type FilterType = #filter_name #b;
 
-                fn connection(&self) -> &'a silo::rusqlite::Connection {
+                fn connection(&self) -> &'__silo__a silo::rusqlite::Connection {
                     self.connection
                 }
 
@@ -106,12 +125,12 @@ impl ToTableStruct {
                 fn load_where(&self, filter: impl Into<Self::FilterType>) -> std::result::Result<Vec<Self::RowType>, silo::rusqlite::Error> {
                     silo::load_where(&self.connection, filter)
                 }
-                fn update(&self, filter: impl Into<Self::FilterType>, updated: #partial_name) -> std::result::Result<usize, silo::rusqlite::Error> {
-                    silo::update::<#value_type_name, #partial_name, Self::FilterType>(&self.connection, filter, updated)
+                fn update(&self, filter: impl Into<Self::FilterType>, updated: #partial_name #b) -> std::result::Result<usize, silo::rusqlite::Error> {
+                    silo::update::<#value_type_name #b, #partial_name #b, Self::FilterType>(&self.connection, filter, updated)
                 }
 
-                fn from_connection(connection: &'a silo::rusqlite::Connection) -> Self {
-                    Self { connection }
+                fn from_connection(connection: &'__silo__a silo::rusqlite::Connection) -> Self {
+                    Self { connection, _marker: Default::default(), }
                 }
             }
         }

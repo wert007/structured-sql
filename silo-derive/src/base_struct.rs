@@ -2,8 +2,11 @@ use crate::attributes::AttributeFieldData;
 use crate::attributes::ToColumnsAttributesEnum;
 use crate::error::Error;
 use convert_case::{Case, Casing};
+use itertools::Itertools;
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, format_ident, quote};
+use syn::Generics;
+use syn::WhereClause;
 use syn::ext::IdentExt;
 use syn::{Ident, Type, Visibility, parse_quote, spanned::Spanned};
 
@@ -214,6 +217,8 @@ impl VariantData {
 pub struct StructData {
     pub visibility: Visibility,
     pub name: Ident,
+    pub generics: Generics,
+    pub where_clause: WhereClause,
     pub rename_variants: Case<'static>,
     members: Vec<Member>,
     skipped_members: Vec<Member>,
@@ -240,6 +245,7 @@ impl StructData {
     pub(crate) fn from_struct_data(
         visibility: Visibility,
         name: Ident,
+        mut generics: Generics,
         fields: syn::Fields,
     ) -> Result<StructData, Error> {
         let fields: Vec<_> = fields
@@ -247,8 +253,10 @@ impl StructData {
             .map(|f| (AttributeFieldData::parse(&f.attrs), f))
             .collect();
         let name_span = name.span();
+        let where_clause = generics.make_where_clause().clone();
         let mut this = Self {
             visibility,
+            generics,
             original_name: name.clone(),
             name,
             members: Vec::new(),
@@ -258,6 +266,7 @@ impl StructData {
             variants: Vec::new(),
             is_partial: false,
             is_row_type: false,
+            where_clause,
         };
         if fields.iter().find(|f| !f.0.is_skip).is_none() {
             return Err(Error::new(name_span, crate::error::ErrorKind::NoColumns));
@@ -277,6 +286,7 @@ impl StructData {
     pub(crate) fn from_enum_data(
         visibility: Visibility,
         name: Ident,
+        mut generics: Generics,
         variants: syn::punctuated::Punctuated<syn::Variant, syn::token::Comma>,
         attrs: ToColumnsAttributesEnum,
     ) -> Result<StructData, Error> {
@@ -295,6 +305,8 @@ impl StructData {
                 v
             })
             .collect();
+        let where_clause = generics.make_where_clause().clone();
+
         let mut this = Self {
             variants,
             original_name: name.clone(),
@@ -302,6 +314,8 @@ impl StructData {
             variant_member: Some(Member::create_variant_member(name.span())),
             visibility,
             name,
+            generics,
+            where_clause,
             members: vec![],
             skipped_members: vec![],
             is_partial: false,
@@ -346,6 +360,8 @@ impl StructData {
             visibility: self.visibility.clone(),
             original_name: self.original_name.clone(),
             name: self.partial_name(),
+            generics: self.generics.clone(),
+            where_clause: self.where_clause.clone(),
             members: self
                 .members
                 .iter()
@@ -401,6 +417,13 @@ impl StructData {
                 })
             })
             .collect()
+    }
+
+    pub(crate) fn generics_names_only(&self, extend_lifetimes: TokenStream) -> TokenStream {
+        let lifetimes = self.generics.lifetimes().map(|l| &l.lifetime).collect_vec();
+        let types = self.generics.type_params().map(|t| &t.ident).collect_vec();
+        let consts = self.generics.const_params().map(|c| &c.ident).collect_vec();
+        quote! {< #extend_lifetimes #(#lifetimes,)* #(#types,)* #(#consts,)*>}
     }
 }
 

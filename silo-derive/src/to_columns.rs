@@ -1,6 +1,6 @@
 use crate::{attributes::ToColumnsAttributesEnum, base_struct};
 use quote::ToTokens;
-use syn::{Ident, Visibility};
+use syn::{Generics, Ident, Visibility};
 
 mod as_params;
 mod extract_from_row;
@@ -17,6 +17,7 @@ impl ToColumnsStruct {
         _attrs: Vec<syn::Attribute>,
         name: Ident,
         visibility: Visibility,
+        generics: Generics,
         data_struct: syn::DataStruct,
     ) -> Result<Self, crate::error::Error> {
         // let attribute_struct_data = attributes::ToTableAttributesStruct::parse(&attrs);
@@ -25,6 +26,7 @@ impl ToColumnsStruct {
         let base_struct: base_struct::StructData = base_struct::StructData::from_struct_data(
             visibility.clone(),
             name.clone(),
+            generics,
             data_struct.fields,
         )?;
         Ok(Self {
@@ -37,12 +39,14 @@ impl ToColumnsStruct {
         attrs: Vec<syn::Attribute>,
         name: Ident,
         visibility: Visibility,
+        generics: Generics,
         data_enum: syn::DataEnum,
     ) -> Result<ToColumnsStruct, crate::error::Error> {
         let attr = ToColumnsAttributesEnum::parse(&attrs)?;
         let base_struct: base_struct::StructData = base_struct::StructData::from_enum_data(
             visibility.clone(),
             name.clone(),
+            generics,
             data_enum.variants,
             attr,
         )?;

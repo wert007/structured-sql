@@ -1,3 +1,4 @@
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{LitStr, ext::IdentExt};
 
@@ -13,6 +14,10 @@ pub(crate) fn create_from_row_for_base_struct(
     base_struct: &super::base_struct::StructData,
     tokens: &mut proc_macro2::TokenStream,
 ) {
+    let a = &base_struct.generics;
+    let b = &base_struct.generics_names_only(TokenStream::new());
+    let c = &base_struct.where_clause;
+
     let name = &base_struct.name;
     let from_row_body = if base_struct.is_partial {
         create_try_from_row_body(base_struct)
@@ -24,7 +29,7 @@ pub(crate) fn create_from_row_for_base_struct(
         )
     };
     let from_row = quote! {
-        impl silo::FromRow for #name {
+        impl #a silo::FromRow for #name #b #c {
             fn try_from_row(
                 row: &silo::rusqlite::Row,
                 connection: &silo::rusqlite::Connection,

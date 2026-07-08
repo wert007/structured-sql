@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{LitStr, ext::IdentExt};
 
@@ -8,6 +9,9 @@ pub(crate) fn create_as_params_for_struct(
     _for_table: bool,
 ) {
     let name = &base_struct.name;
+    let a = &base_struct.generics;
+    let b = &base_struct.generics_names_only(TokenStream::new());
+    let c = &base_struct.where_clause;
     let columns = base_struct.columns();
     let is_primary = columns
         .iter()
@@ -25,11 +29,11 @@ pub(crate) fn create_as_params_for_struct(
         LitStr::new(&n.to_string(), n.span())
     });
     let as_params = quote! {
-            impl silo::AsColumns for #name {
+            impl #a silo::AsColumns for #name #b #c {
                 const COLUMN_COUNT: usize = 0 #(+ <#column_types as silo::AsColumns>::COLUMN_COUNT)*;
             }
 
-            impl silo::AsColumnsDynamicallySized for #name {
+            impl #a silo::AsColumnsDynamicallySized for #name #b #c {
                 fn columns(parent: Option<&str>, is_unique: bool, is_primary: bool) -> Vec<silo::SqlColumn> {
                     assert!(!is_unique);
                     assert!(!is_primary);
@@ -42,7 +46,7 @@ pub(crate) fn create_as_params_for_struct(
                 }
             }
 
-            impl silo::AsParams for #name {
+            impl #a silo::AsParams for #name #b #c {
                 fn as_params<'a>(&'a self) -> Vec<silo::ToSqlDyn<'a>> {
                     use silo::{AsParams};
                     let mut result = Vec::with_capacity(<Self as silo::AsColumns>::COLUMN_COUNT);

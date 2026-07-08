@@ -2,8 +2,10 @@ use silo::derive::{ToColumns, ToTable};
 use uuid::Uuid;
 
 use crate::{
-    self as silo, AsColumns, AsColumnsDynamicallySized, Database, SqlTable, column_name_of,
+    self as silo, AsColumns, AsColumnsDynamicallySized, AsColumnsOptional, AsParams,
+    AsParamsOptional, Database, ExtractFromRow, SqlTable, column_name_of,
     filter::{FieldFilter, Filterable, OptionalFilter},
+    partial::{HasPartial, PartialType},
 };
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, ToColumns)]
@@ -791,4 +793,32 @@ fn simple_enum() {
     assert_eq!(insert, cakes[0]);
     let v: Vec<String> = cake.project("fruit", ()).unwrap();
     assert_eq!(v[0], "pine-apple");
+}
+
+#[test]
+fn test_enum_rename() {
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "kebab-case")]
+    enum ObjectKebab {
+        Value,
+        IndirectValue,
+        XMLAttribute,
+    }
+    #[derive(Debug, Clone, ToTable, PartialEq)]
+    struct Container<
+        T: HasPartial
+            + AsColumns
+            + AsColumnsOptional
+            + AsParams
+            + Default
+            + Clone
+            + Filterable
+            + AsColumnsDynamicallySized,
+    >
+    where
+        T::Partial: ExtractFromRow + PartialType<T> + AsColumnsOptional + AsParamsOptional,
+        T::Filter: Default,
+    {
+        obj: T,
+    }
 }

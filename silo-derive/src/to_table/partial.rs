@@ -11,6 +11,9 @@ pub(crate) fn create_partial_for(
     }
     let visibility = &base_struct.visibility;
     let name = &base_struct.name;
+    let where_clause = &base_struct.where_clause;
+    let generics = &base_struct.generics;
+    let generics_names_only = base_struct.generics_names_only(TokenStream::new());
     let partial_name = base_struct.partial_name();
     let partial_type = create_partial_type_for(base_struct);
     // let variant_field = base_struct.variant_field().map(|f| f.name).into_iter();
@@ -42,17 +45,17 @@ pub(crate) fn create_partial_for(
     let into = create_into_for(base_struct);
     tokens.extend(quote! {
         #[derive(Default)]
-        #visibility struct #partial_name {
+        #visibility struct #partial_name #generics {
             #(#visibility #fields,)*
         }
 
         #partial_type
 
-        impl silo::partial::HasPartial for #name {
-            type Partial = #partial_name;
+        impl #generics silo::partial::HasPartial for #name #generics_names_only #where_clause {
+            type Partial = #partial_name #generics_names_only;
         }
 
-        impl silo::AsColumnsOptional for #partial_name {
+        impl #generics silo::AsColumnsOptional for #partial_name #generics_names_only #where_clause {
             fn columns_skip_optional(
         &self,
         parent: Option<&str>,
@@ -66,7 +69,7 @@ pub(crate) fn create_partial_for(
     }
         }
 
-        impl silo::AsParamsOptional for #partial_name {
+        impl #generics silo::AsParamsOptional for #partial_name #generics_names_only #where_clause {
             fn as_params_skip_optional<'b>(&'b self) -> Vec<silo::ToSqlDyn<'b>> {
                 let mut result = Vec::new();
                 #(result.append(&mut self.#field_names.as_params_skip_optional());)*
@@ -106,6 +109,9 @@ pub(crate) fn create_partial_for(
 
 fn create_into_for(base_struct: &super::base_struct::StructData) -> TokenStream {
     let name = &base_struct.name;
+    let where_clause = &base_struct.where_clause;
+    let generics = &base_struct.generics;
+    let generics_names_only = base_struct.generics_names_only(TokenStream::new());
     let partial_name = base_struct.partial_name();
     let field_names: Vec<_> = base_struct.fields().into_iter().map(|f| f.name).collect();
     let field_names_prefixed_with_optional: Vec<_> = base_struct
@@ -131,8 +137,8 @@ fn create_into_for(base_struct: &super::base_struct::StructData) -> TokenStream 
             })
             .collect::<Vec<_>>();
         quote! {
-            impl Into<#partial_name> for #name {
-                fn into(self) -> #partial_name {
+            impl #generics Into<#partial_name #generics_names_only> for #name #generics_names_only #where_clause {
+                fn into(self) -> #partial_name #generics_names_only {
                     use silo::EnumHelper;
                     #(
                         #[allow(non_snake_case)]
@@ -152,8 +158,8 @@ fn create_into_for(base_struct: &super::base_struct::StructData) -> TokenStream 
         }
     } else {
         quote! {
-            impl Into<#partial_name> for #name {
-                fn into(self) -> #partial_name {
+            impl #generics Into<#partial_name #generics_names_only> for #name #generics_names_only #where_clause {
+                fn into(self) -> #partial_name #generics_names_only {
                     #partial_name {
                         #(#field_names: self.#field_names.into(),)*
                     }
@@ -167,11 +173,14 @@ fn create_partial_type_for(
     base_struct: &super::base_struct::StructData,
 ) -> proc_macro2::TokenStream {
     let name = &base_struct.name;
+    let generics = &base_struct.generics;
+    let where_clause = &base_struct.where_clause;
+    let generics_names_only = &base_struct.generics_names_only(TokenStream::new());
     let partial_name = base_struct.partial_name();
     if let Some(variant_field) = base_struct.variant_field().map(|f| f.name) {
         quote! {
-            impl silo::partial::PartialType<#name> for #partial_name {
-                fn transpose(self) -> Option<#name> {
+            impl #generics silo::partial::PartialType<#name #generics_names_only> for #partial_name #generics_names_only #where_clause {
+                fn transpose(self) -> Option<#name #generics_names_only> {
                     use silo::partial::PartialType;
                     let #variant_field = self.#variant_field.transpose()?;
                     match #variant_field {
@@ -193,8 +202,8 @@ fn create_partial_type_for(
             }
         });
         quote! {
-            impl silo::partial::PartialType<#name> for #partial_name {
-                fn transpose(self) -> Option<#name> {
+            impl #generics silo::partial::PartialType<#name #generics_names_only> for #partial_name #generics_names_only #where_clause {
+                fn transpose(self) -> Option<#name #generics_names_only> {
                     use silo::partial::PartialType;
                     #(let #field_names = self.#field_names.transpose()?;)*
                     Some(#name {

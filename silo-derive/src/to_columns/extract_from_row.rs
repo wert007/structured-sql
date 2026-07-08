@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{LitStr, ext::IdentExt};
 
@@ -22,10 +23,13 @@ fn impl_extract_from_row_for_simple_enum(
     base_struct: &crate::base_struct::StructData,
 ) {
     let name = &base_struct.name;
+    let where_clause = &base_struct.where_clause;
+    let generics = &base_struct.generics;
+    let generics_names_only = base_struct.generics_names_only(TokenStream::new());
     let variants = base_struct.variant_patterns();
     let discriminant_values = base_struct.discriminant_values();
     tokens.extend(quote! {
-        impl silo::ExtractFromRow for #name {
+        impl #generics silo::ExtractFromRow for #name #generics_names_only #where_clause {
             fn try_from_row_simple(column_name: &str, row: &silo::rusqlite::Row) -> Result<Self, silo::Error> {
                 match row.get::<&str, String>(column_name) {
                     Ok(it) => match it.as_str() {
@@ -50,6 +54,9 @@ fn impl_extract_from_row_struct(
     base_struct: &crate::base_struct::StructData,
 ) {
     let name = &base_struct.name;
+    let where_clause = &base_struct.where_clause;
+    let generics = &base_struct.generics;
+    let generics_names_only = base_struct.generics_names_only(TokenStream::new());
     let fields = base_struct.fields();
     let field_names = fields.iter().map(|f| f.name).collect_vec();
     let field_names_literals = fields.iter().map(|f| {
@@ -58,10 +65,10 @@ fn impl_extract_from_row_struct(
     });
     let field_types = fields.iter().map(|f| f.type_).collect_vec();
     tokens.extend(quote! {
-        impl silo::ExtractFromRow for #name {
+        impl #generics silo::ExtractFromRow for #name #generics_names_only #where_clause {
             fn try_from_row_simple(column_name: &str, row: &silo::rusqlite::Row) -> std::result::Result<Self, silo::Error> {
                 let mut result = std::mem::MaybeUninit::uninit();
-                let ptr: *mut #name = result.as_mut_ptr();
+                let ptr: *mut Self = result.as_mut_ptr();
                 #(
                     unsafe {
                         (&raw mut (*ptr).#field_names).write(<#field_types>::try_from_row_simple(&[column_name, concat!("_", #field_names_literals)].concat(), row)?);

@@ -83,9 +83,13 @@ pub fn derive_to_table(input: TokenStream) -> TokenStream {
         .expect("This is a derive macro and should be used with structs or enums.");
 
     let base = match input.data {
-        syn::Data::Struct(data_struct) => {
-            ToTableStruct::from_struct(input.attrs, input.ident, input.vis, data_struct)
-        }
+        syn::Data::Struct(data_struct) => ToTableStruct::from_struct(
+            input.attrs,
+            input.ident,
+            input.vis,
+            input.generics,
+            data_struct,
+        ),
         syn::Data::Enum(data_enum) => {
             ToTableStruct::from_enum(input.attrs, input.ident, input.vis, data_enum)
         }
@@ -106,12 +110,20 @@ pub fn derive_to_columns(input: TokenStream) -> TokenStream {
         .expect("This is a derive macro and should be used with structs or enums.");
 
     let base = match input.data {
-        syn::Data::Struct(data_struct) => {
-            ToColumnsStruct::from_struct(input.attrs, input.ident, input.vis, data_struct)
-        }
-        syn::Data::Enum(data_enum) => {
-            ToColumnsStruct::from_enum(input.attrs, input.ident, input.vis, data_enum)
-        }
+        syn::Data::Struct(data_struct) => ToColumnsStruct::from_struct(
+            input.attrs,
+            input.ident,
+            input.vis,
+            input.generics,
+            data_struct,
+        ),
+        syn::Data::Enum(data_enum) => ToColumnsStruct::from_enum(
+            input.attrs,
+            input.ident,
+            input.vis,
+            input.generics,
+            data_enum,
+        ),
         syn::Data::Union(_) => {
             panic!("Unions need a clear representation, either use a struct or an enum.")
         }

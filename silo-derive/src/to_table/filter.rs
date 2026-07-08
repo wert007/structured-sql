@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{LitStr, ext::IdentExt};
 
@@ -8,6 +9,9 @@ pub(crate) fn create_filter_for(
     let visibility = &base_struct.visibility;
     let filter_name = base_struct.filter_name();
     let name = &base_struct.name;
+    let a = &base_struct.generics;
+    let b = base_struct.generics_names_only(TokenStream::new());
+    let c = &base_struct.where_clause;
 
     let fields = base_struct
         .fields()
@@ -38,19 +42,19 @@ pub(crate) fn create_filter_for(
     };
     quote! {
         #[derive(Default)]
-        #visibility struct #filter_name {
+        #visibility struct #filter_name #a #c {
             #(pub #fields: <#field_types as silo::filter::Filterable>::Filter,)*
         }
 
         #from_pk
 
-        impl From<()> for #filter_name {
+        impl #a From<()> for #filter_name #b #c {
             fn from((): ()) -> Self {
                 Self::default()
             }
         }
 
-        impl silo::filter::Filter for #filter_name {
+        impl #a silo::filter::Filter for #filter_name #b #c {
             fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
                 let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
                 #(
@@ -59,7 +63,7 @@ pub(crate) fn create_filter_for(
             }
         }
 
-        impl silo::AsParams for #filter_name {
+        impl #a silo::AsParams for #filter_name #b #c {
             fn as_params<'a>(&'a self) -> Vec<silo::ToSqlDyn<'a>> {
                     use silo::{AsParams};
                     let mut result = Vec::new();
@@ -70,8 +74,8 @@ pub(crate) fn create_filter_for(
                 }
         }
 
-        impl silo::filter::Filterable for #name {
-            type Filter = #filter_name;
+        impl #a silo::filter::Filterable for #name #b #c {
+            type Filter = #filter_name #b;
             fn convert_to_equals_filter(self) -> Self::Filter {
                 Self::Filter {
                     #(
