@@ -121,12 +121,16 @@ fn convert_expr_to_case_naming(expr: syn::Expr) -> Result<Case<'static>, Error> 
             lit: syn::Lit::Str(lit),
             ..
         }) => match lit.value().as_str() {
+            "lowercase" => Ok(Case::Lower),
+            "UPPERCASE" => Ok(Case::Upper),
+            "SCREAMING_SNAKE_CASE" => Ok(Case::UpperSnake),
+            "SCREAMING-KEBAB-CASE" => Ok(Case::UpperKebab),
+            "UPPER-KEBAB-CASE" => Ok(Case::UpperKebab),
+            "UPPER_SNAKE_CASE" => Ok(Case::UpperSnake),
             "kebab-case" => Ok(Case::Kebab),
             "PascalCase" => Ok(Case::Pascal),
             "camelCase" => Ok(Case::Camel),
             "snake_case" => Ok(Case::Snake),
-            "UPPER-KEBAB-CASE" => Ok(Case::UpperKebab),
-            "UPPER_SNAKE_CASE" => Ok(Case::UpperSnake),
             _ => Err(Error::new(
                 lit.span(),
                 crate::error::ErrorKind::InvalidArgumentToAttributeForRename,

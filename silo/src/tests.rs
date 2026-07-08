@@ -797,15 +797,7 @@ fn simple_enum() {
 }
 
 #[test]
-fn test_enum_rename() {
-    #[derive(Debug, Clone, ToColumns, PartialEq)]
-    #[silo(rename = "kebab-case")]
-    enum ObjectKebab {
-        Value,
-        IndirectValue,
-        XMLAttribute,
-    }
-
+fn test_enum_rename_lowercase() {
     #[derive(Debug, Clone, ToTable, PartialEq)]
     struct Container<T: SiloMarkerTrait>
     where
@@ -813,22 +805,297 @@ fn test_enum_rename() {
     {
         obj: T,
     }
+
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "lowercase")]
+    enum Object {
+        Value,
+        IndirectValue,
+        XMLAttribute,
+    }
+
     let insert = vec![
+        Container { obj: Object::Value },
         Container {
-            obj: ObjectKebab::Value,
+            obj: Object::IndirectValue,
         },
         Container {
-            obj: ObjectKebab::IndirectValue,
-        },
-        Container {
-            obj: ObjectKebab::XMLAttribute,
+            obj: Object::XMLAttribute,
         },
     ];
+
     let db = Database::create_in_memory().unwrap();
-    let db = db.load::<Container<ObjectKebab>>().unwrap();
+    let db = db.load::<Container<Object>>().unwrap();
     db.insert_many(insert.iter()).unwrap();
+
     let v: Vec<String> = db.project("obj", ()).unwrap();
-    assert!(v.iter().any(|e| e == "value"));
-    assert!(v.iter().any(|e| e == "indirect-value"));
-    assert!(v.iter().any(|e| e == "xml-attribute"));
+    assert!(v.contains(&"value".to_string()));
+    assert!(v.contains(&"indirect value".to_string()));
+    assert!(v.contains(&"xml attribute".to_string()));
+}
+
+#[test]
+fn test_enum_rename_uppercase() {
+    #[derive(Debug, Clone, ToTable, PartialEq)]
+    struct Container<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        obj: T,
+    }
+
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "UPPERCASE")]
+    enum Object {
+        Value,
+        IndirectValue,
+        XMLAttribute,
+    }
+
+    let insert = vec![
+        Container { obj: Object::Value },
+        Container {
+            obj: Object::IndirectValue,
+        },
+        Container {
+            obj: Object::XMLAttribute,
+        },
+    ];
+
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Container<Object>>().unwrap();
+    db.insert_many(insert.iter()).unwrap();
+
+    let v: Vec<String> = db.project("obj", ()).unwrap();
+    assert!(v.contains(&"VALUE".to_string()));
+    assert!(v.contains(&"INDIRECT VALUE".to_string()));
+    assert!(v.contains(&"XML ATTRIBUTE".to_string()));
+}
+
+#[test]
+fn test_enum_rename_snake_case() {
+    #[derive(Debug, Clone, ToTable, PartialEq)]
+    struct Container<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        obj: T,
+    }
+
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "snake_case")]
+    enum Object {
+        Value,
+        IndirectValue,
+        XMLAttribute,
+    }
+
+    let insert = vec![
+        Container { obj: Object::Value },
+        Container {
+            obj: Object::IndirectValue,
+        },
+        Container {
+            obj: Object::XMLAttribute,
+        },
+    ];
+
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Container<Object>>().unwrap();
+    db.insert_many(insert.iter()).unwrap();
+
+    let v: Vec<String> = db.project("obj", ()).unwrap();
+    assert!(v.contains(&"value".to_string()));
+    assert!(v.contains(&"indirect_value".to_string()));
+    assert!(v.contains(&"xml_attribute".to_string()));
+}
+
+#[test]
+fn test_enum_rename_screaming_snake_case() {
+    #[derive(Debug, Clone, ToTable, PartialEq)]
+    struct Container<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        obj: T,
+    }
+
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "SCREAMING_SNAKE_CASE")]
+    enum Object {
+        Value,
+        IndirectValue,
+        XMLAttribute,
+    }
+
+    let insert = vec![
+        Container { obj: Object::Value },
+        Container {
+            obj: Object::IndirectValue,
+        },
+        Container {
+            obj: Object::XMLAttribute,
+        },
+    ];
+
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Container<Object>>().unwrap();
+    db.insert_many(insert.iter()).unwrap();
+
+    let v: Vec<String> = db.project("obj", ()).unwrap();
+    assert!(v.contains(&"VALUE".to_string()));
+    assert!(v.contains(&"INDIRECT_VALUE".to_string()));
+    assert!(v.contains(&"XML_ATTRIBUTE".to_string()));
+}
+
+#[test]
+fn test_enum_rename_kebab_case() {
+    #[derive(Debug, Clone, ToTable, PartialEq)]
+    struct Container<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        obj: T,
+    }
+
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "kebab-case")]
+    enum Object {
+        Value,
+        IndirectValue,
+        XMLAttribute,
+    }
+
+    let insert = vec![
+        Container { obj: Object::Value },
+        Container {
+            obj: Object::IndirectValue,
+        },
+        Container {
+            obj: Object::XMLAttribute,
+        },
+    ];
+
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Container<Object>>().unwrap();
+    db.insert_many(insert.iter()).unwrap();
+
+    let v: Vec<String> = db.project("obj", ()).unwrap();
+    assert!(v.contains(&"value".to_string()));
+    assert!(v.contains(&"indirect-value".to_string()));
+    assert!(v.contains(&"xml-attribute".to_string()));
+}
+
+#[test]
+fn test_enum_rename_screaming_kebab_case() {
+    #[derive(Debug, Clone, ToTable, PartialEq)]
+    struct Container<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        obj: T,
+    }
+
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "SCREAMING-KEBAB-CASE")]
+    enum Object {
+        Value,
+        IndirectValue,
+        XMLAttribute,
+    }
+
+    let insert = vec![
+        Container { obj: Object::Value },
+        Container {
+            obj: Object::IndirectValue,
+        },
+        Container {
+            obj: Object::XMLAttribute,
+        },
+    ];
+
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Container<Object>>().unwrap();
+    db.insert_many(insert.iter()).unwrap();
+
+    let v: Vec<String> = db.project("obj", ()).unwrap();
+    assert!(v.contains(&"VALUE".to_string()));
+    assert!(v.contains(&"INDIRECT-VALUE".to_string()));
+    assert!(v.contains(&"XML-ATTRIBUTE".to_string()));
+}
+
+#[test]
+fn test_enum_rename_camel_case() {
+    #[derive(Debug, Clone, ToTable, PartialEq)]
+    struct Container<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        obj: T,
+    }
+
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "camelCase")]
+    enum Object {
+        Value,
+        IndirectValue,
+        XMLAttribute,
+    }
+
+    let insert = vec![
+        Container { obj: Object::Value },
+        Container {
+            obj: Object::IndirectValue,
+        },
+        Container {
+            obj: Object::XMLAttribute,
+        },
+    ];
+
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Container<Object>>().unwrap();
+    db.insert_many(insert.iter()).unwrap();
+
+    let v: Vec<String> = db.project("obj", ()).unwrap();
+    assert!(v.contains(&"value".to_string()));
+    assert!(v.contains(&"indirectValue".to_string()));
+    assert!(v.contains(&"xmlAttribute".to_string()));
+}
+
+#[test]
+fn test_enum_rename_pascal_case() {
+    #[derive(Debug, Clone, ToTable, PartialEq)]
+    struct Container<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        obj: T,
+    }
+
+    #[derive(Debug, Clone, ToColumns, PartialEq)]
+    #[silo(rename = "PascalCase")]
+    enum Object {
+        Value,
+        IndirectValue,
+        XMLAttribute,
+    }
+
+    let insert = vec![
+        Container { obj: Object::Value },
+        Container {
+            obj: Object::IndirectValue,
+        },
+        Container {
+            obj: Object::XMLAttribute,
+        },
+    ];
+
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Container<Object>>().unwrap();
+    db.insert_many(insert.iter()).unwrap();
+
+    let v: Vec<String> = db.project("obj", ()).unwrap();
+    assert!(v.contains(&"Value".to_string()));
+    assert!(v.contains(&"IndirectValue".to_string()));
+    assert!(v.contains(&"XmlAttribute".to_string()));
 }
