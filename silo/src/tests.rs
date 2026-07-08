@@ -3,7 +3,8 @@ use uuid::Uuid;
 
 use crate::{
     self as silo, AsColumns, AsColumnsDynamicallySized, AsColumnsOptional, AsParams,
-    AsParamsOptional, Database, ExtractFromRow, SqlTable, column_name_of,
+    AsParamsOptional, Database, ExtractFromRow, SiloMarkerTrait, SiloPartialMarkerTrait, SqlTable,
+    column_name_of,
     filter::{FieldFilter, Filterable, OptionalFilter},
     partial::{HasPartial, PartialType},
 };
@@ -62,9 +63,9 @@ fn test_person_filter() {
         },
     };
 
-    persons.insert(alice.clone()).unwrap();
-    persons.insert(bob.clone()).unwrap();
-    persons.insert(charlie.clone()).unwrap();
+    persons.insert(&alice).unwrap();
+    persons.insert(&bob).unwrap();
+    persons.insert(&charlie).unwrap();
 
     // Equality
     let loaded = persons
@@ -222,7 +223,7 @@ fn update_person() {
         },
     };
 
-    persons.insert(original.clone()).unwrap();
+    persons.insert(&original).unwrap();
 
     // Update every mutable field.
     let updated = persons
@@ -333,7 +334,7 @@ fn insert_and_load_person() {
         },
     };
 
-    db.insert(person.clone()).unwrap();
+    db.insert(&person).unwrap();
 
     let persons = db.load_where(()).unwrap();
 
@@ -493,7 +494,7 @@ fn test_sqlite_keywords_to_table() {
     let og = Foo {
         values: "lkdjasda".into(),
     };
-    foo_table.insert(og.clone()).unwrap();
+    foo_table.insert(&og).unwrap();
     let loaded = foo_table.load_where(()).unwrap();
     assert_eq!(loaded.len(), 1);
     assert_eq!(og, loaded[0]);
@@ -511,7 +512,7 @@ fn test_sqlite_keywords_as_table_names_to_table() {
     let og = Values {
         values: "lkdjasda".into(),
     };
-    foo_table.insert(og.clone()).unwrap();
+    foo_table.insert(&og).unwrap();
     let loaded = foo_table.load_where(()).unwrap();
     assert_eq!(loaded.len(), 1);
     assert_eq!(og, loaded[0]);
@@ -637,7 +638,7 @@ fn roundtrip_serialization() {
     };
 
     let db = db.load::<TypeCoverage>().unwrap();
-    db.insert(original.clone()).unwrap();
+    db.insert(&original).unwrap();
     let loaded = db.load_where(()).unwrap();
 
     assert_eq!(loaded.len(), 1);
@@ -682,7 +683,7 @@ fn roundtrip_serialization() {
     };
 
     let db = db.load::<TypeCoverage>().unwrap();
-    db.insert(original.clone()).unwrap();
+    db.insert(&original).unwrap();
     let loaded = db.load_where(()).unwrap();
 
     assert_eq!(loaded[0], original);
@@ -784,7 +785,7 @@ fn simple_enum() {
     let insert = Cake {
         fruit: Fruit::PineApple,
     };
-    cake.insert(insert.clone()).unwrap();
+    cake.insert(&insert).unwrap();
     let cakes = cake
         .load_where(CakeFilter {
             fruit: Fruit::PineApple.convert_to_equals_filter(),
@@ -804,21 +805,30 @@ fn test_enum_rename() {
         IndirectValue,
         XMLAttribute,
     }
+
     #[derive(Debug, Clone, ToTable, PartialEq)]
-    struct Container<
-        T: HasPartial
-            + AsColumns
-            + AsColumnsOptional
-            + AsParams
-            + Default
-            + Clone
-            + Filterable
-            + AsColumnsDynamicallySized,
-    >
+    struct Container<T: SiloMarkerTrait>
     where
-        T::Partial: ExtractFromRow + PartialType<T> + AsColumnsOptional + AsParamsOptional,
-        T::Filter: Default,
+        T::Partial: SiloPartialMarkerTrait<T>,
     {
         obj: T,
     }
+    let insert = vec![
+        Container {
+            obj: ObjectKebab::Value,
+        },
+        Container {
+            obj: ObjectKebab::IndirectValue,
+        },
+        Container {
+            obj: ObjectKebab::XMLAttribute,
+        },
+    ];
+    let db = Database::create_in_memory().unwrap();
+    let db = db.load::<Container<ObjectKebab>>().unwrap();
+    db.insert_many(insert.iter()).unwrap();
+    let v: Vec<String> = db.project("obj", ()).unwrap();
+    assert!(v.iter().any(|e| e == "value"));
+    assert!(v.iter().any(|e| e == "indirect-value"));
+    assert!(v.iter().any(|e| e == "xml-attribute"));
 }

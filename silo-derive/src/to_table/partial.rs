@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{LitStr, ext::IdentExt, parse_quote};
@@ -40,13 +41,23 @@ pub(crate) fn create_partial_for(
                     parse_quote!(<#t as silo::partial::HasPartial>::Partial),
                 ))
             })
-        });
+        })
+        .collect_vec();
 
     let into = create_into_for(base_struct);
     tokens.extend(quote! {
-        #[derive(Default)]
-        #visibility struct #partial_name #generics {
+        #visibility struct #partial_name #generics #where_clause {
             #(#visibility #fields,)*
+        }
+
+        impl #generics Default for #partial_name #generics_names_only #where_clause {
+            fn default() -> Self {
+                Self {
+                    #(
+                        #field_names: Default::default(),
+                    )*
+                }
+            }
         }
 
         #partial_type

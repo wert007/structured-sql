@@ -5,6 +5,7 @@ use syn::{Generics, Ident, Visibility};
 mod as_params;
 mod extract_from_row;
 mod filterable;
+mod marker_trait;
 mod partial;
 
 pub struct ToColumnsStruct {
@@ -59,6 +60,7 @@ impl ToColumnsStruct {
 
 impl ToTokens for ToColumnsStruct {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        marker_trait::impl_marker_trait(tokens, &self.base_struct);
         partial::impl_to_partial(tokens, &self.base_struct);
         filterable::impl_filterable(tokens, &self.base_struct);
         extract_from_row::impl_extract_from_row(tokens, &self.base_struct);

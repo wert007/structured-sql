@@ -41,9 +41,18 @@ pub(crate) fn create_filter_for(
         quote! {}
     };
     quote! {
-        #[derive(Default)]
         #visibility struct #filter_name #a #c {
             #(pub #fields: <#field_types as silo::filter::Filterable>::Filter,)*
+        }
+
+        impl #a Default for #filter_name #b #c {
+            fn default() -> Self {
+                Self {
+                    #(
+                        #fields: Default::default(),
+                    )*
+                }
+            }
         }
 
         #from_pk

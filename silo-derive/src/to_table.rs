@@ -82,6 +82,7 @@ impl ToTableStruct {
             base_struct,
             ..
         } = self;
+        let name = &base_struct.name;
         let table_name = base_struct.table_name();
         let value_type_name = &base_struct.name;
         let filter_name = base_struct.filter_name();
@@ -116,10 +117,6 @@ impl ToTableStruct {
 
                 fn connection(&self) -> &'__silo__a silo::rusqlite::Connection {
                     self.connection
-                }
-
-                fn insert(&self, row: Self::RowType) -> std::result::Result<bool, silo::rusqlite::Error> {
-                    silo::insert_into_table(&self.connection, row)
                 }
 
                 fn load_where(&self, filter: impl Into<Self::FilterType>) -> std::result::Result<Vec<Self::RowType>, silo::rusqlite::Error> {

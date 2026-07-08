@@ -1,5 +1,5 @@
 use std::{
-    borrow::Cow,
+    borrow::{Borrow, Cow},
     fmt::Debug,
     path::Path,
     sync::atomic::{AtomicBool, Ordering::SeqCst},
@@ -251,6 +251,18 @@ impl Database {
         self.connection.execute(&sql, ())?;
         Ok(())
     }
+}
+
+pub trait SiloPartialMarkerTrait<T>:
+    ExtractFromRow + partial::PartialType<T> + AsColumnsOptional + AsParamsOptional
+{
+}
+
+pub trait SiloMarkerTrait:
+    partial::HasPartial + AsColumns + AsParams + Clone + filter::Filterable + AsColumnsDynamicallySized
+where
+    <Self as partial::HasPartial>::Partial: SiloPartialMarkerTrait<Self>,
+{
 }
 
 /// This trait represents the columns, that may be part of a struct. Each Column
@@ -559,14 +571,31 @@ impl<'a, T: ToTable<'a>> ToTable<'a> for Option<T> {
 // }
 
 pub trait SqlTable<'a>: Sized {
-    type RowType: ToTable<'a>;
+    type RowType: ToTable<'a> + Clone;
     type ValueType: partial::HasPartial;
     type FilterType: filter::Filter;
     // const INSERT_FAILURE_BEHAVIOR: SqlFailureBehavior;
     fn from_connection(connection: &'a Connection) -> Self;
     fn connection(&self) -> &'a Connection;
 
-    fn insert(&self, row: Self::RowType) -> Result<bool, rusqlite::Error>;
+    fn insert_many<'b>(
+        &self,
+        row: impl Iterator<Item = &'b Self::RowType>,
+    ) -> Result<usize, rusqlite::Error>
+    where
+        Self: 'b,
+        <Self as SqlTable<'a>>::RowType: 'b,
+    {
+        insert_into_table(&self.connection(), row)
+    }
+    fn insert<'b>(&self, row: impl Borrow<Self::RowType>) -> Result<bool, rusqlite::Error>
+    where
+        Self: 'b,
+        <Self as SqlTable<'a>>::RowType: 'b,
+    {
+        self.insert_many(std::iter::once(row.borrow()))
+            .map(|i| i > 0)
+    }
     fn load_where(
         &self,
         filter: impl Into<Self::FilterType>,
@@ -744,10 +773,10 @@ impl SqlColumnType {
     }
 }
 
-pub fn insert_into_table<'a, T: ToTable<'a> + Clone>(
+pub fn insert_into_table<'a, 'b, T: ToTable<'a> + Clone + 'b>(
     connection: &&'a rusqlite::Connection,
-    value: T,
-) -> Result<bool, rusqlite::Error> {
+    value: impl Iterator<Item = &'b T>,
+) -> Result<usize, rusqlite::Error> {
     let columns = T::columns(None, false, false)
         .into_iter()
         .map(|c| c.name)
@@ -778,19 +807,25 @@ pub fn insert_into_table<'a, T: ToTable<'a> + Clone>(
     debug_sql(&sql);
 
     let mut stmt = connection.prepare(&sql)?;
-    let params = value.as_params();
-    let params: Vec<_> = params.iter().map(|p| p.as_dyn()).collect();
-    match stmt.execute(params.as_slice()) {
-        Ok(_) => Ok(true),
-        Err(rusqlite::Error::SqliteFailure(
-            rusqlite::ffi::Error {
-                code: ErrorCode::ConstraintViolation,
-                ..
-            },
-            _,
-        )) => Ok(false),
-        Err(e) => Err(e),
+    let mut count = 0;
+    for value in value {
+        let params = value.as_params();
+        let params: Vec<_> = params.iter().map(|p| p.as_dyn()).collect();
+        match stmt.execute(params.as_slice()) {
+            Ok(_) => {
+                count += 1;
+            }
+            Err(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error {
+                    code: ErrorCode::ConstraintViolation,
+                    ..
+                },
+                _,
+            )) => {}
+            Err(e) => return Err(e),
+        }
     }
+    Ok(count)
 }
 
 pub fn load_where<'a, T: ToTable<'a>, F: filter::Filter>(

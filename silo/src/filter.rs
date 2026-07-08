@@ -125,7 +125,7 @@ fn ensure_where_or_and(sql: &mut String) {
 }
 
 pub trait Filterable {
-    type Filter: Filter;
+    type Filter: Filter + Default;
 
     fn convert_to_equals_filter(self) -> Self::Filter;
 }
