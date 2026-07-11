@@ -221,12 +221,15 @@ impl Database {
     }
 
     fn create<'a, T: ToTable<'a>>(&'a self) -> Result<(), rusqlite::Error> {
-        if self.connection.table_exists(None, T::NAME)? {
+        if self
+            .connection
+            .table_exists(None, T::table_name().as_ref())?
+        {
             return Ok(());
         }
         let mut sql = "CREATE TABLE IF NOT EXISTS \"".to_string();
 
-        sql.push_str(T::NAME);
+        sql.push_str(&T::table_name());
         sql.push_str("\" (");
         for (i, column) in T::columns(None, false, false).into_iter().enumerate() {
             if i > 0 {
@@ -253,6 +256,10 @@ impl Database {
     }
 }
 
+pub trait NameableType {
+    fn type_name() -> Cow<'static, str>;
+}
+
 pub trait SiloPartialMarkerTrait<T>:
     ExtractFromRow + partial::PartialType<T> + AsColumnsOptional + AsParamsOptional
 {
@@ -262,7 +269,7 @@ pub trait SiloPartialMarkerTrait<T>:
 /// ToColumns type. You can use this for generic types like this:
 ///
 /// ```rust
-///# use silo::derive::ToTable;
+///# use silo::{derive::ToTable, SiloMarkerTrait, SiloPartialMarkerTrait};
 /// #[derive(Clone, ToTable)]
 /// struct ValueWithId<T: SiloMarkerTrait> where T::Partial: SiloPartialMarkerTrait<T> {
 ///     #[silo(primary)]
@@ -272,11 +279,15 @@ pub trait SiloPartialMarkerTrait<T>:
 /// ```
 ///
 /// By using the two marker traits you can create generic versions of your
-/// table. Each will create its own table (TODO: Implement this, currently only
-/// the type name without generics is used to generate a name. But maybe we also
-/// want to create a rename attribute in general).
+/// table. Each will create its own table where each generic type is named via [`NameableType`].
 pub trait SiloMarkerTrait:
-    partial::HasPartial + AsColumns + AsParams + Clone + filter::Filterable + AsColumnsDynamicallySized
+    partial::HasPartial
+    + AsColumns
+    + AsParams
+    + Clone
+    + filter::Filterable
+    + AsColumnsDynamicallySized
+    + NameableType
 where
     <Self as partial::HasPartial>::Partial: SiloPartialMarkerTrait<Self>,
 {
@@ -417,6 +428,12 @@ macro_rules! impl_as_params {
 
 macro_rules! impl_as_params_base {
     ($t:ty, $column_type:expr) => {
+        impl NameableType for $t {
+            fn type_name() -> Cow<'static, str> {
+                stringify!($t).into()
+            }
+        }
+
         impl<'a> partial::HasPartial for $t {
             type Partial = Option<$t>;
         }
@@ -557,14 +574,16 @@ impl<T: FromRow> FromRow for Option<T> {
 }
 
 pub trait ToTable<'a>: AsParams + AsColumns + FromRow {
-    const NAME: &'static str;
     type Table: SqlTable<'a>;
+    fn table_name() -> Cow<'static, str>;
 }
 
 impl<'a, T: ToTable<'a>> ToTable<'a> for Option<T> {
-    const NAME: &'static str = T::NAME;
-
     type Table = T::Table;
+
+    fn table_name() -> Cow<'static, str> {
+        T::table_name()
+    }
 }
 
 // #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -822,7 +841,10 @@ pub fn insert_into_table<'a, 'b, T: ToTable<'a> + Clone + 'b>(
             }
         });
 
-    let sql = format!("INSERT INTO \"{}\" ({columns}) VALUES ({values})", T::NAME,);
+    let sql = format!(
+        "INSERT INTO \"{}\" ({columns}) VALUES ({values})",
+        T::table_name()
+    );
     debug_sql(&sql);
 
     let mut stmt = connection.prepare(&sql)?;
@@ -851,7 +873,7 @@ pub fn load_where<'a, T: ToTable<'a>, F: filter::Filter>(
     connection: &&'a rusqlite::Connection,
     filter: impl Into<F>,
 ) -> Result<Vec<T>, rusqlite::Error> {
-    let mut sql = format!("SELECT * FROM \"{}\" WHERE ", T::NAME);
+    let mut sql = format!("SELECT * FROM \"{}\" WHERE ", T::table_name());
     let filter = filter.into();
     filter.to_sql(&mut sql, None);
     let sql = sql.trim_end_matches(" WHERE ");
@@ -888,7 +910,7 @@ pub fn update<'a, T: ToTable<'a>, V: AsParamsOptional + AsColumnsOptional, F: fi
                 acc
             }
         });
-    let mut sql = format!("UPDATE \"{}\" SET {columns}", T::NAME);
+    let mut sql = format!("UPDATE \"{}\" SET {columns}", T::table_name());
     sql.push_str(" WHERE ");
     filter.to_sql(&mut sql, None);
     let sql = sql.trim_end_matches(" WHERE ");

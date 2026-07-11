@@ -6,6 +6,7 @@ mod as_params;
 mod extract_from_row;
 mod filterable;
 mod marker_trait;
+mod nameable_type;
 mod partial;
 
 pub struct ToColumnsStruct {
@@ -65,5 +66,6 @@ impl ToTokens for ToColumnsStruct {
         filterable::impl_filterable(tokens, &self.base_struct);
         extract_from_row::impl_extract_from_row(tokens, &self.base_struct);
         as_params::impl_as_params(tokens, &self.base_struct);
+        nameable_type::impl_nameable_type(tokens, &self.base_struct);
     }
 }

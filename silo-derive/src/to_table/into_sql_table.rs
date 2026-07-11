@@ -19,11 +19,25 @@ pub(crate) fn create_into_sql_table(
     let a = base_struct.generics_names_only(quote! {'__silo__a, });
     let table_name = base_struct.table_name();
     let name_str_lit = LitStr::new(&name.unraw().to_string(), name.span());
+    let mut t = generics.type_params().peekable();
+    let table_name_impl = if t.peek().is_none() {
+        quote! { #name_str_lit.into() }
+    } else {
+        let idents = t.map(|t| &t.ident);
+        quote! {
+            [
+                #name_str_lit,
+                #(&<#idents as silo::NameableType>::type_name(),)*
+            ].join("").into()
+        }
+    };
 
     quote! {
         impl #generics silo::ToTable<'__silo__a> for #name #generics_names_only #where_clause {
             type Table = #table_name #a;
-            const NAME: &'static str = #name_str_lit;
+            fn table_name() -> std::borrow::Cow<'static, str> {
+                #table_name_impl
+            }
         }
     }
 }

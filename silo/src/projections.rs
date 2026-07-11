@@ -183,7 +183,7 @@ pub fn project<'a, T: ToTable<'a>, P: Projectable, F: Filter>(
     }
     let filter = filter.into();
     let columns = projection.columns_to_sql();
-    let mut sql = format!("SELECT {columns} FROM {} WHERE ", T::NAME);
+    let mut sql = format!("SELECT {columns} FROM {} WHERE ", T::table_name());
     filter.to_sql(&mut sql, None);
     let sql = sql.trim_end_matches(" WHERE ");
     debug_sql(sql);

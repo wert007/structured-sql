@@ -471,7 +471,7 @@ fn test_rust_keywords_as_table_name_to_table() {
         r#type: String,
     }
     use silo::ToTable;
-    assert_eq!(r#for::NAME, "for");
+    assert_eq!(r#for::table_name(), "for");
 }
 
 #[test]
