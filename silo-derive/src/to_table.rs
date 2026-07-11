@@ -88,6 +88,7 @@ impl ToTableStruct {
         let filter_name = base_struct.filter_name();
         let partial_name = base_struct.partial_name();
         let b = base_struct.generics_names_only(TokenStream::new());
+        let b_tupled = base_struct.generics_names_only_tupled(TokenStream::new());
         let ab = base_struct.generics_names_only(quote! {'__silo__a,});
         let mut a = base_struct.generics.clone();
         a.params.insert(
@@ -101,7 +102,7 @@ impl ToTableStruct {
         let marker = if base_struct.generics.params.is_empty() {
             quote! {()}
         } else {
-            quote! { std::marker::PhantomData #b }
+            quote! { std::marker::PhantomData #b_tupled }
         };
 
         quote! {

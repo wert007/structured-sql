@@ -2,11 +2,9 @@ use silo::derive::{ToColumns, ToTable};
 use uuid::Uuid;
 
 use crate::{
-    self as silo, AsColumns, AsColumnsDynamicallySized, AsColumnsOptional, AsParams,
-    AsParamsOptional, Database, ExtractFromRow, SiloMarkerTrait, SiloPartialMarkerTrait, SqlTable,
-    column_name_of,
+    self as silo, AsColumns, AsColumnsDynamicallySized, Database, SiloMarkerTrait,
+    SiloPartialMarkerTrait, SqlTable, column_name_of,
     filter::{FieldFilter, Filterable, OptionalFilter},
-    partial::{HasPartial, PartialType},
 };
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, ToColumns)]
@@ -1118,4 +1116,92 @@ fn test_multiple_generic_versions() {
     let t = db.load::<ValueWithId<String>>().unwrap();
     let values = t.load_where(()).unwrap();
     assert!(values.is_empty());
+}
+
+#[test]
+fn test_nested_generics() {
+    use silo::ToTable;
+    #[derive(Clone, Debug, ToTable, PartialEq)]
+    struct Outer<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        level1: Level1<T>,
+    }
+
+    #[derive(Clone, Debug, ToColumns, PartialEq)]
+    struct Level1<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        level2: Level2<T>,
+        t: T,
+    }
+
+    #[derive(Clone, Debug, ToColumns, PartialEq)]
+    struct Level2<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        t: T,
+    }
+
+    assert_eq!(Outer::<u32>::table_name(), "OuterU32");
+
+    let db = Database::create_in_memory().unwrap();
+    let outer = db.load::<Outer<bool>>().unwrap();
+    let insert = Outer {
+        level1: Level1 {
+            level2: Level2 { t: true },
+            t: false,
+        },
+    };
+    outer.insert(&insert).unwrap();
+    let loaded = outer.load_where(()).unwrap();
+    assert_eq!(loaded[0], insert);
+}
+
+#[test]
+fn test_nested_multiple_generics() {
+    use silo::ToTable;
+    #[derive(Clone, Debug, PartialEq, ToTable)]
+    struct Outer<T: SiloMarkerTrait, U: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+        U::Partial: SiloPartialMarkerTrait<U>,
+    {
+        level1: Level1<T, U>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, ToColumns)]
+    struct Level1<T: SiloMarkerTrait, U: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+        U::Partial: SiloPartialMarkerTrait<U>,
+    {
+        level2: Level2<T>,
+        u: U,
+    }
+
+    #[derive(Clone, Debug, PartialEq, ToColumns)]
+    struct Level2<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        t: T,
+    }
+
+    assert_eq!(Outer::<u32, f32>::table_name(), "OuterU32F32");
+
+    let db = Database::create_in_memory().unwrap();
+    let outer = db.load::<Outer<u32, f32>>().unwrap();
+    let insert = Outer {
+        level1: Level1 {
+            level2: Level2 { t: 123 },
+            u: 3.12,
+        },
+    };
+    outer.insert(&insert).unwrap();
+    let loaded = outer.load_where(()).unwrap();
+    assert_eq!(loaded[0], insert);
 }

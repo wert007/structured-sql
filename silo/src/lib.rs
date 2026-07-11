@@ -282,6 +282,7 @@ pub trait SiloPartialMarkerTrait<T>:
 /// table. Each will create its own table where each generic type is named via [`NameableType`].
 pub trait SiloMarkerTrait:
     partial::HasPartial
+    + ExtractFromRow
     + AsColumns
     + AsParams
     + Clone
@@ -399,7 +400,10 @@ impl<T: IsSingleColumn> AsColumnsDynamicallySized for T {
 
 macro_rules! impl_as_params {
     ($t:ty, $column_type:expr) => {
-        impl_as_params_base!($t, $column_type);
+        impl_as_params! {$t, $column_type, stringify!($t)}
+    };
+    ($t:ty, $column_type:expr, $name:expr) => {
+        impl_as_params_base!($t, $column_type, $name);
 
         impl<'a> AsParams for $t {
             fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>> {
@@ -427,10 +431,10 @@ macro_rules! impl_as_params {
 }
 
 macro_rules! impl_as_params_base {
-    ($t:ty, $column_type:expr) => {
+    ($t:ty, $column_type:expr, $name:expr) => {
         impl NameableType for $t {
             fn type_name() -> Cow<'static, str> {
-                stringify!($t).into()
+                $name.into()
             }
         }
 
@@ -444,17 +448,17 @@ macro_rules! impl_as_params_base {
     };
 }
 
-impl_as_params!(bool, SqlColumnType::Integer);
-impl_as_params!(i8, SqlColumnType::Integer);
-impl_as_params!(i16, SqlColumnType::Integer);
-impl_as_params!(i32, SqlColumnType::Integer);
-impl_as_params!(i64, SqlColumnType::Integer);
-impl_as_params!(isize, SqlColumnType::Integer);
-impl_as_params!(u8, SqlColumnType::Integer);
-impl_as_params!(u16, SqlColumnType::Integer);
-impl_as_params!(u32, SqlColumnType::Integer);
-impl_as_params!(usize, SqlColumnType::Integer);
-impl_as_params_base!(u64, SqlColumnType::Integer);
+impl_as_params!(bool, SqlColumnType::Integer, "Bool");
+impl_as_params!(i8, SqlColumnType::Integer, "I8");
+impl_as_params!(i16, SqlColumnType::Integer, "I16");
+impl_as_params!(i32, SqlColumnType::Integer, "I32");
+impl_as_params!(i64, SqlColumnType::Integer, "I64");
+impl_as_params!(isize, SqlColumnType::Integer, "Isize");
+impl_as_params!(u8, SqlColumnType::Integer, "U8");
+impl_as_params!(u16, SqlColumnType::Integer, "U16");
+impl_as_params!(u32, SqlColumnType::Integer, "U32");
+impl_as_params!(usize, SqlColumnType::Integer, "Usize");
+impl_as_params_base!(u64, SqlColumnType::Integer, "U64");
 
 impl AsParams for u64 {
     fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>> {
@@ -486,8 +490,8 @@ impl ExtractFromRow for u64 {
 impl_as_params!(Time, SqlColumnType::Text);
 impl_as_params!(Date, SqlColumnType::Text);
 impl_as_params!(DateTime<Utc>, SqlColumnType::Text);
-impl_as_params_base!(NonNilUuid, SqlColumnType::Text);
-impl_as_params_base!(Uuid, SqlColumnType::Text);
+impl_as_params_base!(NonNilUuid, SqlColumnType::Text, "NonNilUuid");
+impl_as_params_base!(Uuid, SqlColumnType::Text, "Uuid");
 impl AsParams for Uuid {
     fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>> {
         vec![ToSqlDyn::Boxed(Box::new(self.to_string()))]
@@ -535,8 +539,8 @@ impl ExtractFromRow for NonNilUuid {
 }
 
 impl_as_params!(OffsetDateTime, SqlColumnType::Text);
-impl_as_params!(f32, SqlColumnType::Float);
-impl_as_params!(f64, SqlColumnType::Float);
+impl_as_params!(f32, SqlColumnType::Float, "F32");
+impl_as_params!(f64, SqlColumnType::Float, "F64");
 impl_as_params!(String, SqlColumnType::Text);
 
 pub trait FromRow: Sized {

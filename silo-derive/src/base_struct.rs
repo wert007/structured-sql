@@ -425,6 +425,12 @@ impl StructData {
         let consts = self.generics.const_params().map(|c| &c.ident).collect_vec();
         quote! {< #extend_lifetimes #(#lifetimes,)* #(#types,)* #(#consts,)*>}
     }
+    pub(crate) fn generics_names_only_tupled(&self, extend_lifetimes: TokenStream) -> TokenStream {
+        let lifetimes = self.generics.lifetimes().map(|l| &l.lifetime).collect_vec();
+        let types = self.generics.type_params().map(|t| &t.ident).collect_vec();
+        let consts = self.generics.const_params().map(|c| &c.ident).collect_vec();
+        quote! {< (#(#types,)*)>}
+    }
 }
 
 impl ToTokens for StructData {
