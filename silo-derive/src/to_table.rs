@@ -105,6 +105,7 @@ impl ToTableStruct {
         };
 
         quote! {
+
             #visibility struct #table_name #a #c {
                 connection: &'__silo__a silo::rusqlite::Connection,
                 _marker: #marker,

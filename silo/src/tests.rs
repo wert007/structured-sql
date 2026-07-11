@@ -1099,3 +1099,23 @@ fn test_enum_rename_pascal_case() {
     assert!(v.contains(&"IndirectValue".to_string()));
     assert!(v.contains(&"XmlAttribute".to_string()));
 }
+
+#[test]
+fn test_multiple_generic_versions() {
+    let db = Database::create_in_memory().unwrap();
+    #[derive(Clone, ToTable)]
+    struct ValueWithId<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        #[silo(primary)]
+        id: usize,
+        value: T,
+    }
+
+    let t = db.load::<ValueWithId<usize>>().unwrap();
+    t.insert(ValueWithId { id: 0, value: 1234 }).unwrap();
+    let t = db.load::<ValueWithId<String>>().unwrap();
+    let values = t.load_where(()).unwrap();
+    assert!(values.is_empty());
+}

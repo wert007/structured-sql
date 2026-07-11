@@ -27,7 +27,7 @@ pub(crate) fn create_filter_for(
         let pk_type = pk.type_;
         let pk_ident = pk.name;
         quote! {
-            impl From<#pk_type> for #filter_name {
+            impl #a From<#pk_type> for #filter_name #b #c {
                 fn from(#pk_ident: #pk_type) -> Self {
                     use silo::filter::Filterable;
                     Self {

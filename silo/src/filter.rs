@@ -1,6 +1,7 @@
 use crate::{AsParams, ToSqlDyn, conversions::ToSqlValueString};
 use chrono::{DateTime, Utc};
 use std::fmt::Write;
+use time::{Date, OffsetDateTime, Time};
 use uuid::{NonNilUuid, Uuid};
 
 #[derive(Default)]
@@ -40,11 +41,16 @@ pub enum FieldFilter<T: IsFieldFilter> {
     None,
     Not(Box<FieldFilter<T>>),
     Comparison(T, ComparisonOperator),
+    Or(Vec<FieldFilter<T>>),
 }
 
 impl<T: IsFieldFilter> FieldFilter<T> {
     pub fn contains_not(t: &T) -> Self {
         Self::not(Self::contains(t))
+    }
+
+    pub fn or(cases: impl Iterator<Item = Self>) -> Self {
+        Self::Or(cases.collect())
     }
 
     pub fn contains(t: &T) -> Self {
@@ -84,6 +90,10 @@ impl<T: IsFieldFilter> AsParams for FieldFilter<T> {
             FieldFilter::Comparison(it, _) => {
                 vec![ToSqlDyn::Borrowed(it)]
             }
+            FieldFilter::Or(field_filters) => field_filters
+                .iter()
+                .flat_map(|f| f.as_params().into_iter())
+                .collect(),
         }
     }
 }
@@ -111,12 +121,23 @@ impl<T: IsFieldFilter> Filter for FieldFilter<T> {
                     parent.expect("Needs a column name for comparison."),
                 );
             }
+            FieldFilter::Or(field_filters) => {
+                ensure_where_or_and(sql);
+                _ = write!(sql, " (");
+                for (i, f) in field_filters.iter().enumerate() {
+                    if i > 0 {
+                        _ = write!(sql, " OR ");
+                    }
+                    f.to_sql(sql, parent);
+                }
+                _ = write!(sql, " )");
+            }
         }
     }
 }
 
 fn ensure_where_or_and(sql: &mut String) {
-    if !["AND", "(", "WHERE"]
+    if !["AND", "(", "WHERE", "OR"]
         .into_iter()
         .any(|s| sql.trim().ends_with(s))
     {
@@ -168,6 +189,9 @@ macro_rules! impl_filterable {
 }
 
 impl_filterable!(DateTime<Utc>, String);
+impl_filterable!(Time, String);
+impl_filterable!(Date, String);
+impl_filterable!(OffsetDateTime, String);
 impl_filterable!(NonNilUuid, String);
 impl_filterable!(Uuid, String);
 impl_filterable!(String);

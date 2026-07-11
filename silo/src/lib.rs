@@ -258,6 +258,23 @@ pub trait SiloPartialMarkerTrait<T>:
 {
 }
 
+/// This trait is a collection of multiple traits, which compose a valid
+/// ToColumns type. You can use this for generic types like this:
+///
+/// ```rust
+///# use silo::derive::ToTable;
+/// #[derive(Clone, ToTable)]
+/// struct ValueWithId<T: SiloMarkerTrait> where T::Partial: SiloPartialMarkerTrait<T> {
+///     #[silo(primary)]
+///     id: usize,
+///     value: T,
+/// }
+/// ```
+///
+/// By using the two marker traits you can create generic versions of your
+/// table. Each will create its own table (TODO: Implement this, currently only
+/// the type name without generics is used to generate a name. But maybe we also
+/// want to create a rename attribute in general).
 pub trait SiloMarkerTrait:
     partial::HasPartial + AsColumns + AsParams + Clone + filter::Filterable + AsColumnsDynamicallySized
 where
@@ -393,6 +410,8 @@ macro_rules! impl_as_params {
                 }
             }
         }
+
+        impl SiloMarkerTrait for $t {}
     };
 }
 
@@ -845,7 +864,7 @@ pub fn load_where<'a, T: ToTable<'a>, F: filter::Filter>(
     // let params: Vec<_> = params.iter().map(|p| p.as_dyn()).collect();
 
     s.query(())?
-        .mapped(|r| T::try_from_row(r, connection).map_err(|_| todo!()))
+        .mapped(|r| T::try_from_row(r, connection).map_err(|e| todo!("{e:?}")))
         .collect()
 }
 
