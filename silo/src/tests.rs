@@ -1205,3 +1205,30 @@ fn test_nested_multiple_generics() {
     let loaded = outer.load_where(()).unwrap();
     assert_eq!(loaded[0], insert);
 }
+
+#[test]
+fn table_rename() {
+    use silo::ToTable;
+    #[derive(Debug, Clone, ToTable)]
+    #[silo(table_name = "huhu")]
+    struct Table {
+        v: usize,
+    }
+
+    assert_eq!(Table::table_name(), "huhu")
+}
+
+#[test]
+fn table_rename_generic() {
+    use silo::ToTable;
+    #[derive(Debug, Clone, ToTable)]
+    #[silo(table_name = "huhu{T}")]
+    struct Table<T: SiloMarkerTrait>
+    where
+        T::Partial: SiloPartialMarkerTrait<T>,
+    {
+        v: T,
+    }
+
+    assert_eq!(Table::<u32>::table_name(), "huhuU32");
+}

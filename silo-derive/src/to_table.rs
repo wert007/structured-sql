@@ -2,7 +2,10 @@ use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, quote};
 use syn::{Generics, Ident, Lifetime, LifetimeParam, Visibility};
 
-use crate::{attributes, base_struct};
+use crate::{
+    attributes::{self, ToTableAttributesStruct},
+    base_struct,
+};
 
 pub mod as_params;
 pub mod filter;
@@ -17,6 +20,7 @@ pub struct ToTableStruct {
     variants: Option<Vec<Ident>>,
     base_struct: base_struct::StructData,
     on_conflict: proc_macro2::TokenStream,
+    attr: ToTableAttributesStruct,
 }
 
 impl std::fmt::Debug for ToTableStruct {
@@ -44,6 +48,7 @@ impl ToTableStruct {
             data_struct.fields,
         )?;
         Ok(Self {
+            attr: attribute_struct_data,
             visibility,
             variants: None,
             base_struct,
@@ -142,7 +147,7 @@ impl ToTableStruct {
     }
 
     fn create_into_sql_table(&self) -> proc_macro2::TokenStream {
-        into_sql_table::create_into_sql_table(&self.base_struct)
+        into_sql_table::create_into_sql_table(&self.base_struct, &self.attr)
     }
 
     fn create_filter(&self, tokens: &mut proc_macro2::TokenStream) {

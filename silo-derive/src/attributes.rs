@@ -2,7 +2,7 @@ use convert_case::Case;
 use itertools::Itertools;
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
-use syn::{Attribute, spanned::Spanned};
+use syn::{Attribute, LitStr, spanned::Spanned};
 
 use crate::error::Error;
 
@@ -143,7 +143,7 @@ fn convert_expr_to_case_naming(expr: syn::Expr) -> Result<Case<'static>, Error> 
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ToTableAttributesStruct {
     pub on_conflict_rollback: bool,
     pub on_conflict_abort: bool,
@@ -151,12 +151,30 @@ pub struct ToTableAttributesStruct {
     pub on_conflict_ignore: bool,
     pub on_conflict_replace: bool,
     pub has_custom_migration_handler: bool,
+    pub custom_table_name: Option<LitStr>,
+}
+
+impl std::fmt::Debug for ToTableAttributesStruct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToTableAttributesStruct")
+            .field("on_conflict_rollback", &self.on_conflict_rollback)
+            .field("on_conflict_abort", &self.on_conflict_abort)
+            .field("on_conflict_fail", &self.on_conflict_fail)
+            .field("on_conflict_ignore", &self.on_conflict_ignore)
+            .field("on_conflict_replace", &self.on_conflict_replace)
+            .field(
+                "has_custom_migration_handler",
+                &self.has_custom_migration_handler,
+            )
+            .finish()
+    }
 }
 
 impl ToTableAttributesStruct {
     pub fn parse(attrs: &[Attribute]) -> Result<ToTableAttributesStruct, Error> {
         let mut this = Self::default();
         for attribute in attrs {
+            let span = attribute.span();
             let Some(attribute) = StructuredAttribute::new(attribute) else {
                 // This is not intended for us.
                 continue;
@@ -174,12 +192,32 @@ impl ToTableAttributesStruct {
                         "ignore" => this.on_conflict_ignore = true,
                         "replace" => this.on_conflict_replace = true,
                         "migrate" => this.has_custom_migration_handler = true,
-                        _ => {
-                            panic!("Invalid attribute");
+                        err => {
+                            return Err(Error::new(
+                                span,
+                                crate::error::ErrorKind::InvalidAttribute(err.into()),
+                            ));
                         }
                     },
-                    StructuredAttributeArguments::IdentifierExpression(..) => {
-                        panic!("No = in attributes allowed here!");
+                    StructuredAttributeArguments::IdentifierExpression(name, value) => {
+                        match name.as_str() {
+                            "table_name" => {
+                                let syn::Expr::Lit(syn::ExprLit {
+                                    lit: syn::Lit::Str(val),
+                                    ..
+                                }) = value
+                                else {
+                                    return Err(Error::new(span, crate::error::ErrorKind::ArgumentToAttributeMustBeStringLiteral));
+                                };
+                                this.custom_table_name = Some(val)
+                            }
+                            err => {
+                                return Err(Error::new(
+                                    span,
+                                    crate::error::ErrorKind::InvalidAttribute(err.into()),
+                                ));
+                            }
+                        }
                     }
                 }
             }
