@@ -7,7 +7,10 @@ use std::{
 
 use chrono::{DateTime, Utc};
 pub use rusqlite;
-use rusqlite::{Connection, ErrorCode, Params, types::Null};
+use rusqlite::{
+    Connection, ErrorCode, Params,
+    types::{FromSql, Null},
+};
 
 mod error;
 pub mod partial;
@@ -413,16 +416,7 @@ macro_rules! impl_as_params {
 
         impl<'a> ExtractFromRow for $t {
             fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
-                match row.get(column_name) {
-                    Ok(it) => Ok(it),
-                    Err(rusqlite::Error::InvalidColumnName(_)) => {
-                        Err(Error::MissingColumn(column_name.to_string().into()))
-                    }
-                    Err(rusqlite::Error::InvalidColumnType(.., t)) => {
-                        Err(Error::WrongColumnType(stringify!($t).into(), t))
-                    }
-                    Err(err) => unreachable!("Impossible error? {err}"),
-                }
+                extract_from_row(column_name, row)
             }
         }
 
@@ -474,16 +468,8 @@ impl AsParams for u64 {
 
 impl ExtractFromRow for u64 {
     fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
-        match row.get::<&str, i64>(column_name) {
-            Ok(it) => Ok(u64::from_ne_bytes(it.to_ne_bytes())),
-            Err(rusqlite::Error::InvalidColumnName(_)) => {
-                Err(Error::MissingColumn(column_name.to_string().into()))
-            }
-            Err(rusqlite::Error::InvalidColumnType(.., t)) => {
-                Err(Error::WrongColumnType(stringify!(u64).into(), t))
-            }
-            Err(err) => unreachable!("Impossible error? {err}"),
-        }
+        let base: i64 = extract_from_row(column_name, row)?;
+        Ok(u64::from_ne_bytes(base.to_ne_bytes()))
     }
 }
 
@@ -506,35 +492,20 @@ impl AsParams for NonNilUuid {
 
 impl ExtractFromRow for Uuid {
     fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
-        match row.get::<&str, String>(column_name) {
-            Ok(it) => Ok(Uuid::try_parse(&it)
-                .map_err(|e| Error::IllFormattedColumn("Uuid".into(), it, Some(Box::new(e))))?),
-            Err(rusqlite::Error::InvalidColumnName(_)) => {
-                Err(Error::MissingColumn(column_name.to_string().into()))
-            }
-            Err(rusqlite::Error::InvalidColumnType(.., t)) => {
-                Err(Error::WrongColumnType("Uuid".into(), t))
-            }
-            Err(err) => unreachable!("Impossible error? {err}"),
-        }
+        let base: String = extract_from_row(column_name, row)?;
+        Ok(Uuid::try_parse(&base).map_err(|e| {
+            Error::IllFormattedColumn("Uuid".into(), base.clone(), Some(Box::new(e)))
+        })?)
     }
 }
 
 impl ExtractFromRow for NonNilUuid {
     fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
-        match row.get::<&str, String>(column_name) {
-            Ok(it) => Ok(NonNilUuid::new(Uuid::try_parse(&it).map_err(|e| {
-                Error::IllFormattedColumn("Uuid".into(), it.clone(), Some(Box::new(e)))
-            })?)
-            .ok_or(Error::IllFormattedColumn("NonNilUuid".into(), it, None))?),
-            Err(rusqlite::Error::InvalidColumnName(_)) => {
-                Err(Error::MissingColumn(column_name.to_string().into()))
-            }
-            Err(rusqlite::Error::InvalidColumnType(.., t)) => {
-                Err(Error::WrongColumnType("Uuid".into(), t))
-            }
-            Err(err) => unreachable!("Impossible error? {err}"),
-        }
+        let base: String = extract_from_row(column_name, row)?;
+        Ok(NonNilUuid::new(Uuid::try_parse(&base).map_err(|e| {
+            Error::IllFormattedColumn("Uuid".into(), base.clone(), Some(Box::new(e)))
+        })?)
+        .ok_or(Error::IllFormattedColumn("NonNilUuid".into(), base, None))?)
     }
 }
 
@@ -542,6 +513,37 @@ impl_as_params!(OffsetDateTime, SqlColumnType::Text);
 impl_as_params!(f32, SqlColumnType::Float, "F32");
 impl_as_params!(f64, SqlColumnType::Float, "F64");
 impl_as_params!(String, SqlColumnType::Text);
+
+#[derive(Debug, Clone)]
+pub struct Blob(Vec<u8>);
+
+impl_as_params_base!(Blob, SqlColumnType::Blob, "Blob");
+
+impl AsParams for Blob {
+    fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>> {
+        vec![ToSqlDyn::Borrowed(&self.0)]
+    }
+}
+
+impl ExtractFromRow for Blob {
+    fn try_from_row_simple(column_name: &str, row: &rusqlite::Row) -> Result<Self, Error> {
+        let base = extract_from_row(column_name, row)?;
+        Ok(Self(base))
+    }
+}
+
+pub fn extract_from_row<T: FromSql>(column_name: &str, row: &rusqlite::Row) -> Result<T, Error> {
+    match row.get::<&str, T>(column_name) {
+        Ok(it) => Ok(it),
+        Err(rusqlite::Error::InvalidColumnName(_)) => {
+            Err(Error::MissingColumn(column_name.to_string().into()))
+        }
+        Err(rusqlite::Error::InvalidColumnType(.., t)) => {
+            Err(Error::WrongColumnType("Uuid".into(), t))
+        }
+        Err(err) => unreachable!("Impossible error? {err}"),
+    }
+}
 
 pub trait FromRow: Sized {
     fn try_from_row(row: &rusqlite::Row, connection: &rusqlite::Connection) -> Result<Self, Error>;

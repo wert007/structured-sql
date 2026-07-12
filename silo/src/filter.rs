@@ -1,8 +1,21 @@
-use crate::{AsParams, ToSqlDyn, conversions::ToSqlValueString};
+use crate::{AsParams, Blob, ToSqlDyn, conversions::ToSqlValueString};
 use chrono::{DateTime, Utc};
 use std::fmt::Write;
 use time::{Date, OffsetDateTime, Time};
 use uuid::{NonNilUuid, Uuid};
+
+#[derive(Default)]
+pub struct NoopFilter;
+
+impl AsParams for NoopFilter {
+    fn as_params<'b>(&'b self) -> Vec<ToSqlDyn<'b>> {
+        Vec::new()
+    }
+}
+
+impl Filter for NoopFilter {
+    fn to_sql(&self, _sql: &mut String, _parent: Option<&str>) {}
+}
 
 #[derive(Default)]
 pub enum OptionalFilter<T: Filter> {
@@ -233,6 +246,14 @@ impl_write_to_sql_as_to_string!(i64);
 impl_write_to_sql_as_to_string!(isize);
 impl_write_to_sql_as_to_string!(f32);
 impl_write_to_sql_as_to_string!(f64);
+
+impl Filterable for Blob {
+    type Filter = NoopFilter;
+
+    fn convert_to_equals_filter(self) -> Self::Filter {
+        NoopFilter
+    }
+}
 
 impl WriteToSql for bool {
     fn write_to_sql(&self, sql: &mut String, _operator: ComparisonOperator) {
