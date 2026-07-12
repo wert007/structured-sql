@@ -38,8 +38,13 @@ fn create_table_name_impl(
     attr: &ToTableAttributesStruct,
 ) -> TokenStream {
     if let Some(name) = &attr.custom_table_name {
-        // TODO: Support generic types in custom table name.
-        quote! { #name.into() }
+        let mut t = base_struct.generics.type_params().peekable();
+        if t.peek().is_none() {
+            quote! { #name.into() }
+        } else {
+            let idents = t.map(|t| &t.ident);
+            quote! {format!(#name, #(#idents = <#idents as silo::NameableType>::type_name(),)*).into()}
+        }
     } else {
         let name = &base_struct.name;
         let name_str_lit = LitStr::new(&name.unraw().to_string(), name.span());
