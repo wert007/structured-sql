@@ -19,6 +19,7 @@ pub enum ErrorKind {
     NoColumns,
     InvalidArgumentToAttributeForRename,
     ArgumentToAttributeMustBeStringLiteral,
+    AttributeNeedsArgument(&'static str),
 }
 
 impl Display for ErrorKind {
@@ -34,6 +35,12 @@ impl Display for ErrorKind {
             ),
             ErrorKind::InvalidAttribute(attribute) => {
                 write!(f, "No attribute named {attribute} was expected here.")
+            }
+            ErrorKind::AttributeNeedsArgument(attribute) => {
+                write!(
+                    f,
+                    "There is an attribute named {attribute}, but you need to add argument like this: `{attribute} = value`."
+                )
             }
             ErrorKind::NoColumns => {
                 write!(f, "No columns on this struct, nothing to put into a table.")

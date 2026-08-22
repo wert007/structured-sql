@@ -248,10 +248,11 @@ impl StructData {
         mut generics: Generics,
         fields: syn::Fields,
     ) -> Result<StructData, Error> {
-        let fields: Vec<_> = fields
+        let fields: Result<Vec<_>, _> = fields
             .into_iter()
-            .map(|f| (AttributeFieldData::parse(&f.attrs), f))
+            .map(|f| Ok((AttributeFieldData::parse(&f.attrs)?, f)))
             .collect();
+        let fields = fields?;
         let name_span = name.span();
         let where_clause = generics.make_where_clause().clone();
         let mut this = Self {
@@ -291,11 +292,12 @@ impl StructData {
         attrs: ToColumnsAttributesEnum,
     ) -> Result<StructData, Error> {
         let rename_variants = attrs.rename.unwrap_or(Case::Snake);
-        let fields = variants
+        let fields: Result<Vec<_>, _> = variants
             .iter()
             .flat_map(|v| v.fields.iter())
-            .map(|f| (AttributeFieldData::parse(&f.attrs), f.clone()))
+            .map(|f| Ok((AttributeFieldData::parse(&f.attrs)?, f.clone())))
             .collect();
+        let fields = fields?;
         let mut index_offset = 0;
         let variants: Vec<_> = variants
             .iter()

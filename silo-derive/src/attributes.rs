@@ -265,9 +265,10 @@ impl std::fmt::Debug for AttributeFieldData {
 }
 
 impl AttributeFieldData {
-    pub fn parse(attrs: &[Attribute]) -> AttributeFieldData {
+    pub fn parse(attrs: &[Attribute]) -> Result<AttributeFieldData, Error> {
         let mut this = Self::default();
         for attribute in attrs {
+            let span = attribute.span();
             let Some(attribute) = StructuredAttribute::new(attribute) else {
                 // This is not intended for us.
                 continue;
@@ -282,8 +283,17 @@ impl AttributeFieldData {
                         "primary" => this.is_primary = true,
                         "unique" => this.is_unique = true,
                         "skip" => this.is_skip = true,
+                        "default" => {
+                            return Err(Error::new(
+                                span,
+                                crate::error::ErrorKind::AttributeNeedsArgument("default"),
+                            ));
+                        }
                         name => {
-                            panic!("Invalid attribute: {name}");
+                            return Err(Error::new(
+                                span,
+                                crate::error::ErrorKind::InvalidAttribute(name.into()),
+                            ));
                         }
                     },
                     StructuredAttributeArguments::IdentifierExpression(name, expr) => {
@@ -292,13 +302,16 @@ impl AttributeFieldData {
                                 this.default = Some(expr);
                             }
                             name => {
-                                panic!("Invalid assignment attribute: {name}");
+                                return Err(Error::new(
+                                    span,
+                                    crate::error::ErrorKind::InvalidAttribute(name.into()),
+                                ));
                             }
                         }
                     }
                 }
             }
         }
-        this
+        Ok(this)
     }
 }
