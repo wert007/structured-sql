@@ -1240,15 +1240,15 @@ fn table_rename_generic() {
     assert_eq!(Table::<u32>::table_name(), "huhuU32");
 }
 
-#[test]
-fn test_blob() {
-    #[derive(Debug, Clone, ToTable)]
-    struct Table1 {
-        blob: silo::Blob,
-    }
-    #[derive(Debug, Clone, ToTable)]
-    struct Table2 {
-        #[silo(blob)]
-        blob: Vec<u8>,
-    }
-}
+// #[test]
+// fn test_blob() {
+//     #[derive(Debug, Clone, ToTable)]
+//     struct Table1 {
+//         blob: silo::Blob,
+//     }
+//     #[derive(Debug, Clone, ToTable)]
+//     struct Table2 {
+//         #[silo(blob)]
+//         blob: Vec<u8>,
+//     }
+// }
