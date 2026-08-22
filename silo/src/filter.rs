@@ -62,8 +62,13 @@ impl<T: IsFieldFilter> FieldFilter<T> {
         Self::not(Self::contains(t))
     }
 
-    pub fn or(cases: impl Iterator<Item = Self>) -> Self {
-        Self::Or(cases.collect())
+    pub fn or(cases: impl IntoIterator<Item = Self>) -> Self {
+        let cases: Vec<_> = cases.into_iter().collect();
+        if cases.is_empty() {
+            Self::default()
+        } else {
+            Self::Or(cases)
+        }
     }
 
     pub fn contains(t: &T) -> Self {
@@ -92,6 +97,10 @@ impl<T: IsFieldFilter> FieldFilter<T> {
 
     pub fn not(f: FieldFilter<T>) -> Self {
         Self::Not(Box::new(f))
+    }
+
+    pub fn is_one_of(values: impl IntoIterator<Item = T>) -> Self {
+        Self::or(values.into_iter().map(|v| Self::equals(v)))
     }
 }
 
