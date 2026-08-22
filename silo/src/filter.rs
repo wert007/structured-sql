@@ -1,6 +1,6 @@
 use crate::{AsParams, Blob, ToSqlDyn, conversions::ToSqlValueString};
 use chrono::{DateTime, Utc};
-use std::fmt::Write;
+use std::{borrow::Cow, fmt::Write};
 use time::{Date, OffsetDateTime, Time};
 use uuid::{NonNilUuid, Uuid};
 
@@ -266,7 +266,28 @@ impl WriteToSql for String {
             ComparisonOperator::Like => "%",
             _ => "",
         };
-        _ = write!(sql, "'{surroundings}{self}{surroundings}'");
+        _ = write!(sql, "'{surroundings}{}{surroundings}'", escape_sql(self));
+    }
+}
+
+fn escape_sql(p: &'_ str) -> Cow<'_, str> {
+    if p.contains(['\'', '\\', '\n', '\r', '\t', '\0']) {
+        p.chars()
+            .flat_map(|c: char| -> smallvec::SmallVec<[char; 2]> {
+                match c {
+                    '\'' => smallvec::smallvec!['\'', '\''],
+                    '\\' => smallvec::smallvec!['\\', '\\'],
+                    '\n' => smallvec::smallvec!['\\', 'n'],
+                    '\r' => smallvec::smallvec!['\\', 'r'],
+                    '\t' => smallvec::smallvec!['\\', 't'],
+                    '\0' => smallvec::smallvec!['\\', '0'],
+                    _ => smallvec::smallvec![c],
+                }
+            })
+            .collect::<String>()
+            .into()
+    } else {
+        p.into()
     }
 }
 
