@@ -1099,6 +1099,13 @@ fn test_enum_rename_pascal_case() {
 }
 
 #[test]
+fn test_projection_aggregation() {
+    let db = Database::create_in_memory().unwrap();
+    let tbl = db.load::<Person>().unwrap();
+    // tbl.project(silo::projections::MaxOf("hello"), ()).unwrap();
+}
+
+#[test]
 fn test_multiple_generic_versions() {
     let db = Database::create_in_memory().unwrap();
     #[derive(Clone, ToTable)]

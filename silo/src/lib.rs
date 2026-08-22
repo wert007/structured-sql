@@ -28,7 +28,7 @@ use time::OffsetDateTime;
 use time::{Date, Time};
 use uuid::{NonNilUuid, Uuid};
 
-use crate::projections::{Projectable, Projection, ProjectionColumns};
+use crate::projections::{Aggregation, Projectable, Projection, ProjectionColumns};
 
 #[cfg(test)]
 mod tests;
@@ -649,9 +649,9 @@ pub trait SqlTable<'a>: Sized {
         filter: impl Into<Self::FilterType>,
         updated: <Self::ValueType as partial::HasPartial>::Partial,
     ) -> Result<usize, rusqlite::Error>;
-    fn project<P: Projectable>(
+    fn project<P: Projectable<()>>(
         &self,
-        columns: impl Into<ProjectionColumns>,
+        columns: impl Into<ProjectionColumns<()>>,
         filter: impl Into<Self::FilterType>,
     ) -> Result<Vec<P>, rusqlite::Error> {
         projections::project::<Self::RowType, P, Self::FilterType>(
@@ -660,9 +660,20 @@ pub trait SqlTable<'a>: Sized {
             filter.into(),
         )
     }
-    fn project_distinct<P: Projectable>(
+    fn project_aggregated<P: Projectable<Aggregation>>(
         &self,
-        columns: impl Into<ProjectionColumns>,
+        columns: impl Into<ProjectionColumns<Aggregation>>,
+        filter: impl Into<Self::FilterType>,
+    ) -> Result<P, rusqlite::Error> {
+        projections::project_aggregated::<Self::RowType, P, Self::FilterType>(
+            self.connection(),
+            Projection::new(columns.into()),
+            filter.into(),
+        )
+    }
+    fn project_distinct<P: Projectable<()>>(
+        &self,
+        columns: impl Into<ProjectionColumns<()>>,
         filter: impl Into<Self::FilterType>,
     ) -> Result<Vec<P>, rusqlite::Error> {
         projections::project::<Self::RowType, P, Self::FilterType>(
