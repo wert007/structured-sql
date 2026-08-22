@@ -77,6 +77,13 @@ macro_rules! impl_projectable_single_column {
 
 impl_projectable_single_column!(String);
 impl_projectable_single_column!(u8);
+impl_projectable_single_column!(u16);
+impl_projectable_single_column!(u32);
+impl_projectable_single_column!(u64);
+impl_projectable_single_column!(i8);
+impl_projectable_single_column!(i16);
+impl_projectable_single_column!(i32);
+impl_projectable_single_column!(i64);
 
 macro_rules! impl_projectable_tuples {
     ($($t:ident),+$(,)?) => {
