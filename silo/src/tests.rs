@@ -335,7 +335,8 @@ fn insert_and_load_person() {
     db.insert(&person).unwrap();
 
     let persons = db.load_where(()).unwrap();
-
+    let count = db.count(()).unwrap();
+    assert_eq!(count, persons.len());
     assert_eq!(persons.len(), 1);
 
     let loaded = &persons[0];

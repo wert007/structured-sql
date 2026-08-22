@@ -645,6 +645,9 @@ pub trait SqlTable<'a>: Sized {
         &self,
         filter: impl Into<Self::FilterType>,
     ) -> Result<Vec<Self::RowType>, rusqlite::Error>;
+    fn count(&self, filter: impl Into<Self::FilterType>) -> Result<usize, rusqlite::Error> {
+        count::<Self::RowType, Self::FilterType>(&self.connection(), filter)
+    }
     fn update(
         &self,
         filter: impl Into<Self::FilterType>,
@@ -885,6 +888,19 @@ pub fn insert_into_table<'a, 'b, T: ToTable<'a> + Clone + 'b>(
         }
     }
     Ok(count)
+}
+
+pub fn count<'a, T: ToTable<'a>, F: filter::Filter>(
+    connection: &&'a rusqlite::Connection,
+    filter: impl Into<F>,
+) -> Result<usize, rusqlite::Error> {
+    let mut sql = format!("SELECT COUNT(*) FROM \"{}\" WHERE ", T::table_name());
+    let filter = filter.into();
+    filter.to_sql(&mut sql, None);
+    let sql = sql.trim_end_matches(" WHERE ");
+    debug_sql(sql);
+    let mut s = connection.prepare(sql)?;
+    s.query_one((), |r| r.get(0))
 }
 
 pub fn load_where<'a, T: ToTable<'a>, F: filter::Filter>(
