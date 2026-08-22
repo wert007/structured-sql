@@ -18,6 +18,6 @@ pub enum Error {
     IllFormattedColumn(
         Cow<'static, str>,
         String,
-        Option<Box<dyn std::error::Error>>,
+        Option<Box<dyn std::error::Error + Send + Sync>>,
     ),
 }
