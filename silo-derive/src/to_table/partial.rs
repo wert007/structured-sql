@@ -191,6 +191,9 @@ fn create_partial_type_for(
     if let Some(variant_field) = base_struct.variant_field().map(|f| f.name) {
         quote! {
             impl #generics silo::partial::PartialType<#name #generics_names_only> for #partial_name #generics_names_only #where_clause {
+                fn is_empty(&self) -> bool {
+                    compile_error!("Enum support missing");
+                }
                 fn transpose(self) -> Option<#name #generics_names_only> {
                     use silo::partial::PartialType;
                     let #variant_field = self.#variant_field.transpose()?;
@@ -214,6 +217,9 @@ fn create_partial_type_for(
         });
         quote! {
             impl #generics silo::partial::PartialType<#name #generics_names_only> for #partial_name #generics_names_only #where_clause {
+                fn is_empty(&self) -> bool {
+                    #(self.#field_names.is_empty() &&)* true
+                }
                 fn transpose(self) -> Option<#name #generics_names_only> {
                     use silo::partial::PartialType;
                     #(let #field_names = self.#field_names.transpose()?;)*

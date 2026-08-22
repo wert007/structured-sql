@@ -130,6 +130,8 @@ impl ToTableStruct {
                     silo::load_where(&self.connection, filter)
                 }
                 fn update(&self, filter: impl Into<Self::FilterType>, updated: #partial_name #b) -> std::result::Result<usize, silo::rusqlite::Error> {
+                    use silo::partial::PartialType;
+                    if updated.is_empty() {return Ok(0)}
                     silo::update::<#value_type_name #b, #partial_name #b, Self::FilterType>(&self.connection, filter, updated)
                 }
 

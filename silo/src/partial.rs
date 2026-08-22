@@ -1,8 +1,13 @@
 pub trait PartialType<T> {
+    fn is_empty(&self) -> bool;
     fn transpose(self) -> Option<T>;
 }
 
 impl<T> PartialType<T> for Option<T> {
+    fn is_empty(&self) -> bool {
+        self.is_none()
+    }
+
     fn transpose(self) -> Option<T> {
         self
     }
