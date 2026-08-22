@@ -130,7 +130,8 @@ pub static DEBUG_SQL: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "enable_debug_sql")]
 #[track_caller]
 pub fn toggle_debug_sql() {
-    DEBUG_SQL.update(SeqCst, SeqCst, |b| !b);
+    let b = DEBUG_SQL.load(SeqCst);
+    DEBUG_SQL.store(!b, SeqCst);
 }
 #[cfg(not(feature = "enable_debug_sql"))]
 #[track_caller]
