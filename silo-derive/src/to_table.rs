@@ -126,9 +126,6 @@ impl ToTableStruct {
                     self.connection
                 }
 
-                fn load_where(&self, filter: impl Into<Self::FilterType>) -> std::result::Result<Vec<Self::RowType>, silo::rusqlite::Error> {
-                    silo::load_where(&self.connection, filter)
-                }
                 fn update(&self, filter: impl Into<Self::FilterType>, updated: #partial_name #b) -> std::result::Result<usize, silo::rusqlite::Error> {
                     use silo::partial::PartialType;
                     if updated.is_empty() {return Ok(0)}

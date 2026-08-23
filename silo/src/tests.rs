@@ -1253,3 +1253,30 @@ fn table_rename_generic() {
 //         blob: Vec<u8>,
 //     }
 // }
+
+#[test]
+// #[should_panic]
+fn test_migration_runtime_error() -> () {
+    mod v1 {
+        use crate as silo;
+        #[derive(Debug, PartialEq, Clone, silo::derive::ToTable)]
+        pub struct A {
+            pub value: usize,
+        }
+    }
+    mod v2 {
+        use crate as silo;
+
+        #[derive(Debug, PartialEq, Clone, silo::derive::ToTable)]
+        pub struct A {
+            pub value: usize,
+            pub added: String,
+        }
+    }
+
+    let db = Database::create_in_memory().unwrap();
+    let a = db.load::<v1::A>().unwrap();
+    a.insert(v1::A { value: 32 }).unwrap();
+    let a = db.load::<v2::A>().unwrap();
+    assert_eq!(a.load_where(()), Ok(Vec::new()));
+}

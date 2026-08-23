@@ -644,7 +644,9 @@ pub trait SqlTable<'a>: Sized {
     fn load_where(
         &self,
         filter: impl Into<Self::FilterType>,
-    ) -> Result<Vec<Self::RowType>, rusqlite::Error>;
+    ) -> Result<Vec<Self::RowType>, error::Error> {
+        load_where(&self.connection(), filter)
+    }
     fn count(&self, filter: impl Into<Self::FilterType>) -> Result<usize, rusqlite::Error> {
         count::<Self::RowType, Self::FilterType>(&self.connection(), filter)
     }
@@ -906,7 +908,7 @@ pub fn count<'a, T: ToTable<'a>, F: filter::Filter>(
 pub fn load_where<'a, T: ToTable<'a>, F: filter::Filter>(
     connection: &&'a rusqlite::Connection,
     filter: impl Into<F>,
-) -> Result<Vec<T>, rusqlite::Error> {
+) -> Result<Vec<T>, error::Error> {
     let mut sql = format!("SELECT * FROM \"{}\" WHERE ", T::table_name());
     let filter = filter.into();
     filter.to_sql(&mut sql, None);
@@ -920,7 +922,12 @@ pub fn load_where<'a, T: ToTable<'a>, F: filter::Filter>(
     // let params: Vec<_> = params.iter().map(|p| p.as_dyn()).collect();
 
     s.query(())?
-        .mapped(|r| T::try_from_row(r, connection).map_err(|e| todo!("{e:?}")))
+        .mapped(|r| Ok(T::try_from_row(r, connection).map_err(|e| e)))
+        .map(|e| match e {
+            Ok(Ok(it)) => Ok(it),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
+        })
         .collect()
 }
 
