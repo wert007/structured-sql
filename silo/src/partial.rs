@@ -1,6 +1,24 @@
+use std::borrow::Cow;
+
+pub enum TransposeError {
+    MissingValue,
+    MissingColumn(Cow<'static, str>),
+}
+
+impl TransposeError {
+    pub fn supply_field_name(self, field_name: &'static str) -> Self {
+        match self {
+            TransposeError::MissingValue => Self::MissingColumn(field_name.into()),
+            TransposeError::MissingColumn(column) => {
+                Self::MissingColumn([field_name, "_", &column].concat().into())
+            }
+        }
+    }
+}
+
 pub trait PartialType<T> {
     fn is_empty(&self) -> bool;
-    fn transpose(self) -> Option<T>;
+    fn transpose(self) -> Result<T, TransposeError>;
 }
 
 impl<T> PartialType<T> for Option<T> {
@@ -8,8 +26,8 @@ impl<T> PartialType<T> for Option<T> {
         self.is_none()
     }
 
-    fn transpose(self) -> Option<T> {
-        self
+    fn transpose(self) -> Result<T, TransposeError> {
+        self.ok_or(TransposeError::MissingValue)
     }
 }
 

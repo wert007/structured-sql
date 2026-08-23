@@ -25,7 +25,7 @@ pub(crate) fn create_from_row_for_base_struct(
         let partial = base_struct.partial_name();
         quote!(
             use silo::partial::PartialType;
-            #partial::try_from_row(row, connection)?.transpose().ok_or(silo::Error::Todo("Improve error handling here, so we know which column was missing".into()))
+            Ok(#partial::try_from_row(row, connection)?.transpose()?)
         )
     };
     let from_row = quote! {

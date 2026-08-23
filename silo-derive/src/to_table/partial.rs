@@ -194,11 +194,11 @@ fn create_partial_type_for(
                 fn is_empty(&self) -> bool {
                     compile_error!("Enum support missing");
                 }
-                fn transpose(self) -> Option<#name #generics_names_only> {
+                fn transpose(self) -> Result<#name #generics_names_only, silo::partial::TransposeError> {
                     use silo::partial::PartialType;
                     let #variant_field = self.#variant_field.transpose()?;
                     match #variant_field {
-                        _ => None
+                        _ => todo!()
                     }
                 }
             }
@@ -220,10 +220,10 @@ fn create_partial_type_for(
                 fn is_empty(&self) -> bool {
                     #(self.#field_names.is_empty() &&)* true
                 }
-                fn transpose(self) -> Option<#name #generics_names_only> {
+                fn transpose(self) -> Result<#name #generics_names_only, silo::partial::TransposeError> {
                     use silo::partial::PartialType;
-                    #(let #field_names = self.#field_names.transpose()?;)*
-                    Some(#name {
+                    #(let #field_names = self.#field_names.transpose().map_err(|e| e.supply_field_name(stringify!(#field_names)))?;)*
+                    Ok(#name {
                         #(#field_names,)*
                         #(#skipped_fields)*
                     })

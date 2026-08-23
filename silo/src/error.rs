@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 
+use crate::partial;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{0}")]
@@ -20,4 +22,34 @@ pub enum Error {
         String,
         Option<Box<dyn std::error::Error + Send + Sync>>,
     ),
+}
+
+impl From<partial::TransposeError> for Error {
+    fn from(value: partial::TransposeError) -> Self {
+        match value {
+            partial::TransposeError::MissingValue => {
+                Self::Todo("Is this even possible to reach?".into())
+            }
+            partial::TransposeError::MissingColumn(column) => Self::MissingColumn(column),
+        }
+    }
+}
+
+impl PartialEq for Error {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Rusqlite(l0), Self::Rusqlite(r0)) => l0 == r0,
+            (Self::MissingColumn(l0), Self::MissingColumn(r0)) => l0 == r0,
+            (Self::WrongColumnType(l0, l1), Self::WrongColumnType(r0, r1)) => l0 == r0 && l1 == r1,
+            (Self::CouldNotMigrate(l0), Self::CouldNotMigrate(r0)) => l0 == r0,
+            (Self::Todo(l0), Self::Todo(r0)) => l0 == r0,
+            (Self::UnknownEnumVariant(l0, l1), Self::UnknownEnumVariant(r0, r1)) => {
+                l0 == r0 && l1 == r1
+            }
+            (Self::IllFormattedColumn(l0, l1, _), Self::IllFormattedColumn(r0, r1, _)) => {
+                l0 == r0 && l1 == r1
+            }
+            _ => false,
+        }
+    }
 }
