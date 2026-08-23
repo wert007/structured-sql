@@ -17,6 +17,7 @@ pub mod partial;
 pub use error::Error;
 mod conversions;
 pub mod filter;
+mod migrations;
 pub mod projections;
 
 pub mod derive {
@@ -218,13 +219,15 @@ impl Database {
         self.connection.backup("main", path, None)?;
         Ok(())
     }
-    pub fn load<'a, T: ToTable<'a>>(&'a self) -> rusqlite::Result<T::Table> {
+    pub fn load<'a, T: ToTable<'a>>(&'a self) -> Result<T::Table, error::Error> {
         self.create::<T>()?;
 
-        Ok(T::Table::from_connection(&self.connection))
+        let t = T::Table::from_connection(&self.connection);
+        migrations::check_table_schema::<T>(&t).unwrap();
+        Ok(t)
     }
 
-    fn create<'a, T: ToTable<'a>>(&'a self) -> Result<(), rusqlite::Error> {
+    fn create<'a, T: ToTable<'a>>(&'a self) -> Result<(), error::Error> {
         if self
             .connection
             .table_exists(None, T::table_name().as_ref())?
@@ -793,6 +796,12 @@ pub struct SqlColumn {
     pub is_unique: bool,
 }
 
+impl SqlColumn {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SqlColumnType {
     Float,
@@ -830,6 +839,18 @@ impl SqlColumnType {
             SqlColumnType::Null => Self::Null,
             SqlColumnType::OptionalText | SqlColumnType::Text => Self::OptionalText,
             SqlColumnType::OptionalBlob | SqlColumnType::Blob => Self::OptionalBlob,
+        }
+    }
+
+    fn from_table_info(c: &migrations::TableInfo) -> SqlColumnType {
+        match (c.notnull, c.r#type.as_str()) {
+            (false, "INTEGER") => Self::Integer,
+            (true, "INTEGER") => Self::OptionalInteger,
+            (false, "REAL") => Self::Float,
+            (true, "REAL") => Self::OptionalFloat,
+            (false, "TEXT") => Self::Text,
+            (true, "TEXT") => Self::OptionalText,
+            (notnull, typ) => unreachable!("Unknown type {typ} (optional? {notnull})"),
         }
     }
 }
