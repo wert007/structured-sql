@@ -5,8 +5,7 @@ edition = "2024"
 categories = ["database"]
 keywords = ["sqlite", "rusqlite"]
 description = "(WIP) A derive macro over rusqlite which allows you to get started with a database fastly."
-license = "MIT OR Apache 2.0"
-
+license = "MIT OR Apache-2.0"
 
 [features]
 default = ["derive"]

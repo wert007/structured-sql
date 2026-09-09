@@ -2,6 +2,9 @@
 name = "sqilo-derive"
 version = "0.1.0"
 edition = "2024"
+description = "(WIP) A derive macro over rusqlite which allows you to get started with a database fastly. You probably are looking for sqilo though."
+license = "MIT OR Apache-2.0"
+
 
 [lib]
 proc-macro = true
