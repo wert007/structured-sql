@@ -1,0 +1,16 @@
+[package]
+name = "sqilo-derive"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+convert_case = "0.11.0"
+heck = "0.5.0"
+ident_case_conversions = "1.0.0"
+itertools = "0.14.0"
+proc-macro2 = "1.0.95"
+quote = "1.0.40"
+syn = { version = "2.0.101", features = ["full"] }
