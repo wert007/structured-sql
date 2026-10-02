@@ -1,0 +1,81 @@
+// #[derive(Default, Debug, Clone, sqilo::derive::ToTable)]
+// // #[sqilo(primary_key)]
+// struct AddressTT {
+//     // pk: PrimaryKey,
+//     #[sqilo(primary)]
+//     pk: u64,
+//     city: String,
+//     street: String,
+// }
+
+use sqilo::column_name_of;
+use uuid::Uuid;
+
+#[derive(Default, Debug, Clone, sqilo::derive::ToColumns)]
+struct AddressTC {
+    city: String,
+    street: String,
+}
+
+#[derive(Default, Debug, Clone, sqilo::derive::ToTable)]
+struct Person {
+    name: String,
+    age: u8,
+    traditional_name: Option<String>,
+    #[sqilo(primary)]
+    id: Uuid,
+    residence: AddressTC,
+}
+
+fn main() {
+    use sqilo::{Database, SqlTable};
+
+    sqilo::toggle_debug_sql();
+
+    let db = Database::create_in_memory().unwrap();
+    let persons = db.load::<Person>().unwrap();
+    persons
+        .insert(Person {
+            name: "Johnny English".into(),
+            age: 58,
+            traditional_name: None,
+            id: Uuid::max(),
+            residence: AddressTC {
+                city: "Toronot".into(),
+                street: "Bakerstreet 221b".into(),
+            },
+        })
+        .unwrap();
+    dbg!(
+        persons
+            .project::<(String, u8, String)>(
+                [
+                    column_name_of!(Person, name),
+                    column_name_of!(Person, age),
+                    column_name_of!(Person, residence.street),
+                ],
+                ()
+            )
+            .unwrap()
+    );
+    // dbg!(persons.load_where(()).unwrap());
+    db.save("file.sqlite").unwrap();
+
+    // let r = persons
+    //     .load_where(|f| {
+    //         f.and(
+    //             f.name_equals("Johnny English"),
+    //             f.or(f.age_less_than(60), f.age_greater_than(70)),
+    //         )
+    //     })
+    //     .unwrap();
+    // dbg!(r);
+    // persons.load_where(|f| {
+    //     f.name_equals("Johnny english")
+    //         .and()
+    //         .age_less_than(60)
+    //         .or()
+    //         .age_greater_than(70)
+    // });
+    println!("Hello, world!");
+}

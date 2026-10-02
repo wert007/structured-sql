@@ -1,0 +1,118 @@
+use itertools::Itertools;
+use proc_macro2::TokenStream;
+use quote::quote;
+use syn::{LitStr, ext::IdentExt};
+
+pub(crate) fn create_filter_for(
+    base_struct: &super::base_struct::StructData,
+) -> proc_macro2::TokenStream {
+    let visibility = &base_struct.visibility;
+    let filter_name = base_struct.filter_name();
+    let name = &base_struct.name;
+    let a = &base_struct.generics;
+    let b = base_struct.generics_names_only(TokenStream::new());
+    let c = &base_struct.where_clause;
+
+    let fields = base_struct
+        .fields()
+        .into_iter()
+        .map(|f| f.name)
+        .collect_vec();
+    let fields_str_lit = fields.iter().map(|f| {
+        let n = f.unraw();
+        LitStr::new(&n.to_string(), n.span())
+    });
+    let field_types = base_struct.fields().into_iter().map(|f| f.type_);
+    let from_pk = if let Some(pk) = base_struct.primary_key_field() {
+        let pk_type = pk.type_;
+        let pk_ident = pk.name;
+        quote! {
+            impl #a From<#pk_type> for #filter_name #b #c {
+                fn from(#pk_ident: #pk_type) -> Self {
+                    use sqilo::filter::Filterable;
+                    Self {
+                        #pk_ident: #pk_ident.convert_to_equals_filter(),
+                        ..Default::default()
+                    }
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+    quote! {
+        #visibility struct #filter_name #a #c {
+            #(pub #fields: <#field_types as sqilo::filter::Filterable>::Filter,)*
+        }
+
+        impl #a Default for #filter_name #b #c {
+            fn default() -> Self {
+                Self {
+                    #(
+                        #fields: Default::default(),
+                    )*
+                }
+            }
+        }
+
+        #from_pk
+
+        impl #a From<()> for #filter_name #b #c {
+            fn from((): ()) -> Self {
+                Self::default()
+            }
+        }
+
+        impl #a sqilo::filter::Filter for #filter_name #b #c {
+            fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
+                let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
+                #(
+                    self.#fields.to_sql(sql, Some(&format!("{parent}{}", #fields_str_lit)));
+                )*
+            }
+
+            // Implementation not correct, most of the time, but it is a start...
+            fn or(self, other: Self) -> Self {
+                Self {
+                    #(#fields: self.#fields.or(other.#fields),)*
+                }
+            }
+
+            // Implementation not correct, most of the time, but it is a start...
+            fn and(self, other: Self) -> Self {
+                Self {
+                    #(#fields: self.#fields.and(other.#fields),)*
+                }
+            }
+
+            // Implementation not correct, most of the time, but it is a start...
+            fn not(self) -> Self {
+                Self {
+                    #(#fields: self.#fields.not(),)*
+                }
+            }
+        }
+
+        impl #a sqilo::AsParams for #filter_name #b #c {
+            fn as_params<'a>(&'a self) -> Vec<sqilo::ToSqlDyn<'a>> {
+                    use sqilo::{AsParams};
+                    let mut result = Vec::new();
+                    #(
+                        result.extend(AsParams::as_params(&self.#fields));
+                    )*
+                    result
+                }
+        }
+
+        impl #a sqilo::filter::Filterable for #name #b #c {
+            type Filter = #filter_name #b;
+            fn convert_to_equals_filter(self) -> Self::Filter {
+                Self::Filter {
+                    #(
+                        #fields: self.#fields.convert_to_equals_filter(),
+                    )*
+                }
+            }
+        }
+    }
+}

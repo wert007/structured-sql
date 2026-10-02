@@ -1,3 +1,7 @@
 [workspace]
-members = ["silo", "silo-derive", "test-structured-sql"]
+members = [
+    "sqilo",
+    "sqilo-derive",
+    #  "test-structured-sql"
+]
 resolver = "3"

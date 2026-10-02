@@ -1,0 +1,34 @@
+[package]
+name = "sqilo"
+version = "0.1.0"
+edition = "2024"
+categories = ["database"]
+keywords = ["sqlite", "rusqlite"]
+description = "(WIP) A derive macro over rusqlite which allows you to get started with a database fastly."
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["derive"]
+enable_debug_sql = []
+derive = ["dep:sqilo-derive"]
+
+[dependencies]
+chrono = "0.4.41"
+const_format = { version = "0.2.34", features = ["rust_1_83"] }
+konst = { version = "0.3.16", features = [
+    "rust_latest_stable",
+    "rust_1_83",
+    "alloc",
+] }
+rusqlite = { version = "0.36.0", features = [
+    "bundled",
+    "backup",
+    "chrono",
+    "time",
+] }
+sqilo-derive = { version = "0.1.0", path = "../sqilo-derive/", optional = true }
+smallvec = "1.15.2"
+strum = { version = "0.27.1", features = ["derive"] }
+thiserror = "2.0.18"
+time = "0.3.41"
+uuid = "1.23.3"
