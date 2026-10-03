@@ -49,3 +49,21 @@ impl ToSqlValueString for chrono::DateTime<chrono::Utc> {
         self.to_rfc3339()
     }
 }
+
+impl ToSqlValueString for chrono::NaiveDate {
+    fn to_sql_value_string(self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToSqlValueString for chrono::NaiveTime {
+    fn to_sql_value_string(self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToSqlValueString for chrono::NaiveDateTime {
+    fn to_sql_value_string(self) -> String {
+        self.to_string()
+    }
+}
