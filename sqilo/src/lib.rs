@@ -494,6 +494,9 @@ impl ExtractFromRow for u64 {
 
 impl_as_params!(Time, SqlColumnType::Text);
 impl_as_params!(Date, SqlColumnType::Text);
+impl_as_params!(chrono::NaiveDate, SqlColumnType::Text);
+impl_as_params!(chrono::NaiveDateTime, SqlColumnType::Text);
+impl_as_params!(chrono::NaiveTime, SqlColumnType::Text);
 impl_as_params!(DateTime<Utc>, SqlColumnType::Text);
 impl_as_params_base!(NonNilUuid, SqlColumnType::Text, "NonNilUuid");
 impl_as_params_base!(Uuid, SqlColumnType::Text, "Uuid");

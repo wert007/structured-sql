@@ -352,6 +352,9 @@ macro_rules! impl_filterable {
 }
 
 impl_filterable!(DateTime<Utc>, String);
+impl_filterable!(chrono::NaiveDate, String);
+impl_filterable!(chrono::NaiveTime, String);
+impl_filterable!(chrono::NaiveDateTime, String);
 impl_filterable!(Time, String);
 impl_filterable!(Date, String);
 impl_filterable!(OffsetDateTime, String);
