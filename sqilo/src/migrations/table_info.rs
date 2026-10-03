@@ -254,6 +254,12 @@ impl From<()> for TableInfoFilter {
     }
 }
 impl filter::Filter for TableInfoFilter {
+    fn is_empty(&self) -> bool {
+        self.name.is_empty()
+            && self.notnull.is_empty()
+            && self.pk.is_empty()
+            && self.r#type.is_empty()
+    }
     fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
         let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
         self.name.to_sql(sql, Some(&format!("{parent}{}", "name")));

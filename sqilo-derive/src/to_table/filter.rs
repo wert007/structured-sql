@@ -64,6 +64,9 @@ pub(crate) fn create_filter_for(
         }
 
         impl #a sqilo::filter::Filter for #filter_name #b #c {
+            fn is_empty(&self) -> bool {
+                true #(&& self.#fields.is_empty())*
+            }
             fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
                 let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
                 #(

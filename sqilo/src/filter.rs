@@ -14,6 +14,9 @@ impl AsParams for NoopFilter {
 }
 
 impl Filter for NoopFilter {
+    fn is_empty(&self) -> bool {
+        true
+    }
     fn to_sql(&self, _sql: &mut String, _parent: Option<&str>) {}
 
     fn not(self) -> Self {
@@ -53,6 +56,9 @@ impl<T: Filter> AsParams for OptionalFilter<T> {
 }
 
 impl<T: Filter> Filter for OptionalFilter<T> {
+    fn is_empty(&self) -> bool {
+        matches!(self, OptionalFilter::IsEither)
+    }
     fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
         match self {
             OptionalFilter::NeverMatch => todo!(),
@@ -225,7 +231,8 @@ impl<T: IsFieldFilter> AsParams for FieldFilter<T> {
     }
 }
 
-pub trait Filter: AsParams {
+pub trait Filter: AsParams + Default {
+    fn is_empty(&self) -> bool;
     fn to_sql(&self, sql: &mut String, parent: Option<&str>);
     fn not(self) -> Self;
     fn or(self, other: Self) -> Self;
@@ -233,6 +240,9 @@ pub trait Filter: AsParams {
 }
 
 impl<T: IsFieldFilter> Filter for FieldFilter<T> {
+    fn is_empty(&self) -> bool {
+        matches!(self, FieldFilter::None)
+    }
     fn to_sql(&self, sql: &mut String, parent: Option<&str>) {
         match self {
             FieldFilter::None => {}
