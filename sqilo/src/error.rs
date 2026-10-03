@@ -24,6 +24,10 @@ pub enum Error {
         String,
         Option<Box<dyn std::error::Error + Send + Sync>>,
     ),
+    #[error(
+        "Tried deleting complete table with a filter, either use delete_all or enable deletion by filter for this table."
+    )]
+    TriedDeletingAllEntriesWithFilter,
 }
 
 impl From<partial::TransposeError> for Error {
