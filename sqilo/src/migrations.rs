@@ -1,8 +1,70 @@
 mod table_info;
 
-use crate::{FromRow, SqlColumn, SqlColumnType, SqlTable, ToTable};
+use crate::{Database, FromRow, SqlColumn, SqlColumnType, SqlTable, ToTable};
 use rusqlite::Connection;
 pub use table_info::TableInfo;
+
+pub trait Migrateable {
+    fn migrate_each(
+        db: &Database,
+        migration_behavior: MigrationBehavior,
+    ) -> Result<(), crate::error::Error>;
+}
+
+impl<M: for<'a> ToTable<'a>> Migrateable for M {
+    fn migrate_each(
+        db: &Database,
+        migration_behavior: MigrationBehavior,
+    ) -> Result<(), crate::error::Error> {
+        db.load_and_migrate::<Self>(migration_behavior)?;
+        Ok(())
+    }
+}
+
+macro_rules! impl_migrateable_tuples {
+    ($($t:ident),+$(,)?) => {
+        impl<$($t: Migrateable,)+> Migrateable for ($($t,)+) {
+            fn migrate_each(
+                db: &Database,
+                migration_behavior: MigrationBehavior,
+            ) -> Result<(), crate::error::Error> {
+                $(
+                    $t::migrate_each(db, migration_behavior)?;
+                )*
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_migrateable_tuples!(T1, T2);
+impl_migrateable_tuples!(T1, T2, T3);
+impl_migrateable_tuples!(T1, T2, T3, T4);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5, T6,);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5, T6, T7);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5, T6, T7, T8);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5, T6, T7, T8, T9);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
+impl_migrateable_tuples!(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
+impl_migrateable_tuples!(
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15
+);
+impl_migrateable_tuples!(
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
+);
+
+impl Database {
+    pub fn migrate_only<M: Migrateable>(
+        &self,
+        migration_behavior: MigrationBehavior,
+    ) -> Result<(), crate::error::Error> {
+        M::migrate_each(self, migration_behavior)
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum MigrationError {
@@ -12,13 +74,16 @@ pub enum MigrationError {
     InvalidChanges(SchemaDiff),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MigrationBehavior {
     MigrationHandler,
+    #[default]
     NoMigration,
     AllowOnlyColumnDeletion,
     AllowOnlyColumnAddition,
     AllowColumnAdditionAndDeletion,
 }
+
 impl MigrationBehavior {
     fn work_through_diff(
         &self,
