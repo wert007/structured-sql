@@ -1331,3 +1331,38 @@ fn test_deletion() {
         .unwrap();
     assert_eq!(r, 1);
 }
+
+#[test]
+fn test_deletion_draining() {
+    let db = Database::create_in_memory().unwrap();
+    let p = db.load::<Person>().unwrap();
+    let to_be_deleted = Person {
+        name: "Dieter".into(),
+        age: 1,
+        traditional_name: None,
+        id: Uuid::max(),
+        residence: AddressTC {
+            city: "Paderborn".into(),
+            street: "Mozart St.".into(),
+        },
+    };
+    p.insert(&to_be_deleted).unwrap();
+    p.insert(Person {
+        name: "Peter".into(),
+        age: 2,
+        traditional_name: None,
+        id: Uuid::max(),
+        residence: AddressTC {
+            city: "Paderborn".into(),
+            street: "Mozart St.".into(),
+        },
+    })
+    .unwrap();
+    let r = p
+        .drain(PersonFilter {
+            age: 1u8.convert_to_equals_filter(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(r, [to_be_deleted]);
+}
