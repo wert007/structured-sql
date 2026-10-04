@@ -11,15 +11,15 @@ pub struct TableInfo {
     pub pk: u32,
 }
 
-pub struct TableInfoTable<'__silo__a> {
-    connection: &'__silo__a rusqlite::Connection,
+pub struct TableInfoTable<'a> {
+    connection: &'a rusqlite::Connection,
     _marker: (),
 }
-impl<'__silo__a> SqlTable<'__silo__a> for TableInfoTable<'__silo__a> {
+impl<'a> SqlTable<'a> for TableInfoTable<'a> {
     type RowType = TableInfo;
     type ValueType = TableInfo;
     type FilterType = TableInfoFilter;
-    fn connection(&self) -> &'__silo__a rusqlite::Connection {
+    fn connection(&self) -> &'a rusqlite::Connection {
         self.connection
     }
     fn update(
@@ -33,15 +33,15 @@ impl<'__silo__a> SqlTable<'__silo__a> for TableInfoTable<'__silo__a> {
         }
         update::<TableInfo, PartialTableInfo, Self::FilterType>(&self.connection, filter, updated)
     }
-    fn from_connection(connection: &'__silo__a rusqlite::Connection) -> Self {
+    fn from_connection(connection: &'a rusqlite::Connection) -> Self {
         Self {
             connection,
             _marker: Default::default(),
         }
     }
 }
-impl<'__silo__a> ToTable<'__silo__a> for TableInfo {
-    type Table = TableInfoTable<'__silo__a>;
+impl<'a> ToTable<'a> for TableInfo {
+    type Table = TableInfoTable<'a>;
     fn table_name() -> std::borrow::Cow<'static, str> {
         "TableInfo".into()
     }
@@ -105,7 +105,6 @@ impl partial::PartialType<TableInfo> for PartialTableInfo {
             && true
     }
     fn transpose(self) -> Result<TableInfo, partial::TransposeError> {
-        use partial::PartialType;
         let name = self
             .name
             .transpose()
@@ -137,8 +136,8 @@ impl AsColumnsOptional for PartialTableInfo {
     fn columns_skip_optional(
         &self,
         parent: Option<&str>,
-        is_unique: bool,
-        is_primary: bool,
+        _is_unique: bool,
+        _is_primary: bool,
     ) -> Vec<SqlColumn> {
         let parent = parent.map(|p| format!("{p}_")).unwrap_or_default();
         let mut result = Vec::new();
@@ -274,11 +273,11 @@ impl filter::Filter for TableInfoFilter {
         todo!()
     }
 
-    fn or(self, other: Self) -> Self {
+    fn or(self, _other: Self) -> Self {
         todo!()
     }
 
-    fn and(self, other: Self) -> Self {
+    fn and(self, _other: Self) -> Self {
         todo!()
     }
 }

@@ -136,7 +136,17 @@ impl MigrationBehavior {
 
 impl From<crate::Error> for MigrationError {
     fn from(value: crate::Error) -> Self {
-        todo!()
+        match value {
+            crate::Error::Rusqlite(error) => MigrationError::Rusqlite(error),
+            crate::Error::MissingColumn(_) => todo!(),
+            crate::Error::WrongColumnType(_, _) => todo!(),
+            crate::Error::CouldNotMigrate(_) => todo!(),
+            crate::Error::MigrationError(migration_error) => migration_error,
+            crate::Error::Todo(_) => todo!(),
+            crate::Error::UnknownEnumVariant(_, _) => todo!(),
+            crate::Error::IllFormattedColumn(_, _, _) => todo!(),
+            crate::Error::TriedDeletingAllEntriesWithFilter => todo!(),
+        }
     }
 }
 

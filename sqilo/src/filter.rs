@@ -66,7 +66,10 @@ impl<T: Filter> Filter for OptionalFilter<T> {
             OptionalFilter::IsNone => todo!(),
             OptionalFilter::IsSome => todo!(),
             OptionalFilter::IsSomeAnd(it) => it.to_sql(sql, parent),
-            OptionalFilter::IsNoneOr(it) => todo!(),
+            OptionalFilter::IsNoneOr(it) => {
+                _ = write!(sql, "( {} = NULL OR ", parent.unwrap());
+                it.to_sql(sql, parent);
+            }
         }
     }
     fn not(self) -> Self {
