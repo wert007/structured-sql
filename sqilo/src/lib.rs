@@ -682,6 +682,26 @@ pub trait SqlTable<'a>: Sized {
             Self::FilterType::default(),
         )
     }
+    fn drain(
+        &self,
+        filter: impl Into<Self::FilterType>,
+    ) -> Result<Vec<Self::RowType>, error::Error> {
+        use filter::Filter;
+        let filter = filter.into();
+        if filter.is_empty() {
+            return Err(Error::TriedDeletingAllEntriesWithFilter);
+        }
+        Ok(drain_where::<Self::RowType, Self::FilterType>(
+            &self.connection(),
+            filter,
+        )?)
+    }
+    fn drain_all(&self) -> Result<Vec<Self::RowType>, error::Error> {
+        Ok(drain_where::<Self::RowType, Self::FilterType>(
+            &self.connection(),
+            Self::FilterType::default(),
+        )?)
+    }
     fn count(&self, filter: impl Into<Self::FilterType>) -> Result<usize, rusqlite::Error> {
         count::<Self::RowType, Self::FilterType>(&self.connection(), filter)
     }
@@ -1002,9 +1022,6 @@ pub fn delete_where<'a, T: ToTable<'a>, F: filter::Filter>(
     // TODO: Filters encode their params directly. We might wanna change that,
     // but for now, this is not needed.
 
-    // let params = filter.as_params();
-    // let params: Vec<_> = params.iter().map(|p| p.as_dyn()).collect();
-
     Ok(s.execute(())?)
     // s.query(())?
     //     .mapped(|r| Ok(T::try_from_row(r, connection).map_err(|e| e)))
@@ -1014,6 +1031,35 @@ pub fn delete_where<'a, T: ToTable<'a>, F: filter::Filter>(
     //         Err(e) => Err(e.into()),
     //     })
     //     .collect()
+}
+
+pub fn drain_where<'a, T: ToTable<'a>, F: filter::Filter>(
+    connection: &&'a rusqlite::Connection,
+    filter: impl Into<F>,
+) -> Result<Vec<T>, error::Error> {
+    let mut sql = format!("DELETE FROM \"{}\"", T::table_name());
+    let filter = filter.into();
+    if !filter.is_empty() {
+        sql.push_str(" WHERE ");
+        filter.to_sql(&mut sql, None);
+    }
+    sql.push_str(" RETURNING *");
+    let sql = sql.as_str();
+
+    debug_sql(sql);
+    let mut s = connection.prepare(sql)?;
+    // TODO: Filters encode their params directly. We might wanna change that,
+    // but for now, this is not needed.
+
+    // Ok(s.execute(())?)
+    s.query(())?
+        .mapped(|r| Ok(T::try_from_row(r, connection).map_err(|e| e)))
+        .map(|e| match e {
+            Ok(Ok(it)) => Ok(it),
+            Ok(Err(e)) => Err(e.into()),
+            Err(e) => Err(e.into()),
+        })
+        .collect()
 }
 
 pub fn update<'a, T: ToTable<'a>, V: AsParamsOptional + AsColumnsOptional, F: filter::Filter>(
